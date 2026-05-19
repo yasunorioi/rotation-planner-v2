@@ -43,6 +43,40 @@ def _ensure_field_owned(conn, user_id: int, field_id: int) -> None:
         raise HTTPException(404, "ほ場が見つかりません")
 
 
+def _crop_suggestions(user_id: int) -> list[str]:
+    """作物候補リスト: DEFAULT_CONSTRAINTS + 既存履歴 + ユーザの計画 constraints。"""
+    from rotation_planner.app import DEFAULT_CONSTRAINTS
+    import json as _json
+
+    seen: dict[str, None] = {}  # 順序保持の set 代用
+    for c in DEFAULT_CONSTRAINTS.keys():
+        seen.setdefault(c, None)
+    with connect() as conn:
+        # ユーザの履歴に登場した作物
+        for r in conn.execute(
+            "SELECT DISTINCT h.crop FROM crop_history h "
+            "JOIN fields f ON h.field_id = f.id "
+            "WHERE f.user_id = ? AND h.crop IS NOT NULL AND h.crop != ''",
+            (user_id,),
+        ):
+            if r["crop"]:
+                seen.setdefault(r["crop"], None)
+        # ユーザの計画 constraints から作物名抽出
+        for r in conn.execute(
+            "SELECT constraints_json FROM rotation_plans "
+            "WHERE user_id = ? AND constraints_json IS NOT NULL",
+            (user_id,),
+        ):
+            try:
+                obj = _json.loads(r["constraints_json"])
+                if isinstance(obj, dict):
+                    for c in obj.keys():
+                        seen.setdefault(c, None)
+            except (TypeError, _json.JSONDecodeError):
+                pass
+    return list(seen.keys())
+
+
 @router.get("/", response_class=HTMLResponse)
 def history_list(
     request: Request,
@@ -249,14 +283,19 @@ def cell_edit(
     field_id: int,
     year: str,
 ):
-    """編集モード (input フィールドにフォーカス)。"""
+    """編集モード (input フィールドにフォーカス、datalist で作物候補)。"""
     with connect() as conn:
         _ensure_field_owned(conn, user["id"], field_id)
         crop = _read_cell(conn, field_id, year)
     return templates.TemplateResponse(
         request,
         "history/_cell_edit.html",
-        {"field_id": field_id, "year": year, "crop": crop},
+        {
+            "field_id": field_id,
+            "year": year,
+            "crop": crop,
+            "crops": _crop_suggestions(user["id"]),
+        },
     )
 
 

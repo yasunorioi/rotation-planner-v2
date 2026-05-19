@@ -3,8 +3,12 @@
     <input type="hidden" name="field_id" value="{{ field_id }}">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="text" name="crop" value="{{ crop }}" autofocus
+           list="crop-suggestions-{{ field_id }}-{{ year }}"
            hx-get="/history/cell?field_id={{ field_id }}&year={{ year }}"
            hx-trigger="keyup[key=='Escape']"
            hx-target="closest td" hx-swap="outerHTML">
+    <datalist id="crop-suggestions-{{ field_id }}-{{ year }}">
+      {% for c in crops %}<option value="{{ c }}"></option>{% endfor %}
+    </datalist>
   </form>
 </td>

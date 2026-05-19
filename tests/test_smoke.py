@@ -1149,6 +1149,33 @@ def test_aggregation_empty(app_client):
     assert "履歴データがありません" in r.text
 
 
+def test_history_cell_edit_has_crop_datalist(app_client):
+    fid = _make_field(app_client, "DL1")
+    # 履歴に「あさつき」を1件入れて、それが候補に出ることを確認
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "あさつき"})
+    r = app_client.get(f"/history/cell/edit?field_id={fid}&year=R7")
+    assert r.status_code == 200
+    # input が datalist を参照
+    assert "list=\"crop-suggestions-" in r.text
+    assert "<datalist " in r.text
+    # DEFAULT_CONSTRAINTS から:
+    assert '<option value="てんさい"></option>' in r.text
+    # ユーザの履歴から:
+    assert '<option value="あさつき"></option>' in r.text
+
+
+def test_history_cell_datalist_includes_plan_constraints(app_client):
+    fid = _make_field(app_client, "DL2")
+    # 計画作成 + そばを制約に追加
+    import re
+    r = app_client.post("/plans/", data={"name": "DT", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    app_client.post(f"/plans/{pid}/constraints/add", data={"new_crop": "そば"})
+    # 履歴セル編集 → そば が候補に出る
+    r = app_client.get(f"/history/cell/edit?field_id={fid}&year=R7")
+    assert '<option value="そば"></option>' in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る
