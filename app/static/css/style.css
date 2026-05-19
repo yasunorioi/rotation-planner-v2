@@ -109,3 +109,10 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .csv-link { color: #2d6a4f; }
 .area-info { background: #fff; border: 1px solid #d8d8d8; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.9rem; }
 .sync-area-btn { background: #2d6a4f; color: #fff; border: 0; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-left: 0.5rem; }
+.apply-block { margin-top: 1.5rem; padding: 1rem; background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; display: flex; flex-direction: column; gap: 0.5rem; }
+.apply-block form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; background: none; border: 0; padding: 0; margin: 0; }
+.apply-result .result-msg { color: #2d6a4f; }
+.aggregation-table { background: #fff; }
+.aggregation-table th { background: #eef; }
+.aggregation-table td { text-align: right; }
+.aggregation-table td.total { background: #d8f3dc; font-weight: 600; }

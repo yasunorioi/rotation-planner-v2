@@ -184,6 +184,47 @@ def generate_plan_pdf(plan: dict, result: dict) -> bytes:
     return buf.getvalue()
 
 
+def generate_aggregation_pdf(data: dict, title: str = "作付集計") -> bytes:
+    """年×作物の集計表 PDF を生成。"""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
+    font = _ensure_font()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+    )
+    crops = data["crops"]
+    years = data["years"]
+    rows = [["年"] + crops + ["合計"]]
+    for y in years:
+        row = [y]
+        for c in crops:
+            v = data["summary"][y].get(c, 0)
+            row.append(f"{v:.2f}" if v else "")
+        row.append(f"{data['year_total'][y]:.2f}")
+        rows.append(row)
+    table = Table(rows, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef")),
+        ("BACKGROUND", (-1, 0), (-1, -1), colors.HexColor("#d8f3dc")),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+    ]))
+    story = [
+        _header_block(title, f"出力日: {datetime.now().strftime('%Y-%m-%d')}", font),
+        table,
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
 def generate_pesticide_records_pdf(records: list[dict], title: str = "防除記録") -> bytes:
     """防除記録 PDF を生成して bytes を返す。"""
     from reportlab.lib import colors

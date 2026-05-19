@@ -201,6 +201,52 @@ async def remove_constraint_crop(
     return RedirectResponse(f"/plans/{plan_id}/constraints", status_code=303)
 
 
+@router.post("/{plan_id}/apply-to-history", response_class=HTMLResponse)
+def apply_plan_year_to_history(
+    request: Request,
+    user: CurrentUser,
+    plan_id: int,
+    year: str = Form(...),
+):
+    """指定した将来年の計画結果を crop_history に upsert する。
+    年が past_years に入っている場合や、grid に該当年データがない場合はエラー。"""
+    from app.optimizer_service import run_optimization_for_plan
+
+    plan = _fetch_plan(user["id"], plan_id)
+    result = run_optimization_for_plan(user["id"], plan)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("message", "最適化失敗"))
+    if year not in result["future_years"]:
+        raise HTTPException(400, f"年 {year} は計画の将来年 {result['future_years']} に含まれません")
+
+    applied = 0
+    with connect() as conn:
+        # field_code → id の逆引き
+        fmap = {
+            r["field_code"]: r["id"]
+            for r in conn.execute(
+                "SELECT id, field_code FROM fields WHERE user_id = ?", (user["id"],)
+            ).fetchall()
+        }
+        for code in result["field_codes"]:
+            crop = result["grid"].get((code, year))
+            fid = fmap.get(code)
+            if not crop or not fid:
+                continue
+            conn.execute(
+                "INSERT INTO crop_history (field_id, year, crop) VALUES (?, ?, ?) "
+                "ON CONFLICT(field_id, year) DO UPDATE SET crop = excluded.crop",
+                (fid, year, crop),
+            )
+            applied += 1
+
+    return templates.TemplateResponse(
+        request,
+        "plans/_apply_result.html",
+        {"plan": plan, "year": year, "applied": applied},
+    )
+
+
 @router.get("/{plan_id}/result.pdf")
 def export_result_pdf(user: CurrentUser, plan_id: int):
     from fastapi.responses import Response

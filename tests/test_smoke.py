@@ -1083,6 +1083,72 @@ def test_kmz_export(app_client):
     assert r.content.startswith(b"PK")
 
 
+def test_apply_plan_year_to_history(app_client):
+    # ほ場 + 計画
+    _make_field(app_client, "AP1")
+    _make_field(app_client, "AP2")
+    r = app_client.post("/plans/", data={"name": "適用テスト", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 適用
+    r = app_client.post(
+        f"/plans/{pid}/apply-to-history",
+        data={"year": "R8"},
+    )
+    assert r.status_code == 200
+    assert "計画を作付履歴に反映しました" in r.text
+    assert "2 件 upsert" in r.text or "1 件 upsert" in r.text  # 最適化結果次第
+    # 履歴ページで R8 が埋まっている
+    r = app_client.get("/history/?from=R8&to=R8")
+    # 何らかの作物名が出現 (どの作物かは最適化次第)
+    assert "AP1" in r.text
+
+
+def test_apply_to_history_rejects_past_year(app_client):
+    _make_field(app_client, "AP3")
+    r = app_client.post("/plans/", data={"name": "T", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 計画範囲外
+    r = app_client.post(f"/plans/{pid}/apply-to-history", data={"year": "R5"})
+    assert r.status_code == 400
+
+
+def test_aggregation_page(app_client):
+    # 履歴データ投入 (2 ほ場 × 2 年)
+    csv_in = (
+        "ほ場ID,area,R6,R7\n"
+        "AG1,200,だいず,てんさい\n"  # 2.0ha
+        "AG2,300,てんさい,だいず\n"  # 3.0ha
+    )
+    app_client.post(
+        "/fields/import",
+        files={"file": ("a.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    r = app_client.get("/aggregation/?from=R6&to=R7")
+    assert r.status_code == 200
+    assert "作付集計" in r.text
+    # R6 だいず 2.0ha + R6 てんさい 3.0ha = 合計 5.0
+    assert "5.00" in r.text  # 合計列に出る
+    # CSV
+    r = app_client.get("/aggregation/export.csv?from=R6&to=R7")
+    text = r.content.decode("utf-8-sig")
+    assert "年" in text and "だいず" in text and "てんさい" in text
+    # 各セル
+    # R6: だいず 2.00, てんさい 3.00
+    assert "2.00" in text and "3.00" in text
+    # PDF
+    r = app_client.get("/aggregation/export.pdf?from=R6&to=R7")
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF-")
+
+
+def test_aggregation_empty(app_client):
+    r = app_client.get("/aggregation/?from=R20&to=R21")
+    assert r.status_code == 200
+    assert "履歴データがありません" in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

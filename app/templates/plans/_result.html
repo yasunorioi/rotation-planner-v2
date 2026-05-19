@@ -60,6 +60,21 @@
 </table>
 {% endif %}
 
+{% if result.future_years %}
+<div class="apply-block">
+  <form hx-post="/plans/{{ plan.id }}/apply-to-history"
+        hx-target="#apply-result" hx-swap="innerHTML">
+    <label>履歴に反映する年:
+      <select name="year">
+        {% for y in result.future_years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" hx-confirm="選択した年の計画結果を作付履歴に上書きします。よろしいですか？">この年を履歴に反映</button>
+  </form>
+  <div id="apply-result"></div>
+</div>
+{% endif %}
+
 {% if result.errors %}
 <details class="warnings">
   <summary>⚠️ 警告/違反 {{ result.errors|length }}件</summary>

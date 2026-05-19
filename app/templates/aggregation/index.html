@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}集計{% endblock %}
+{% block content %}
+<h2>作付集計 (年 × 作物合計面積 ha)</h2>
+
+<form method="get" action="/aggregation/" class="year-range">
+  <label>年度範囲:
+    <input type="text" name="from" value="{{ from_y }}" size="4" placeholder="R5">
+    〜
+    <input type="text" name="to" value="{{ to_y }}" size="4" placeholder="R10">
+  </label>
+  <button type="submit">表示</button>
+  <a href="/aggregation/export.csv?from={{ from_y }}&to={{ to_y }}" class="csv-link">CSV</a>
+  /
+  <a href="/aggregation/export.pdf?from={{ from_y }}&to={{ to_y }}" class="csv-link">PDF</a>
+</form>
+
+{% if not data.crops %}
+<p class="hint">この年度範囲には履歴データがありません。</p>
+{% else %}
+<table class="aggregation-table">
+  <thead>
+    <tr>
+      <th>年</th>
+      {% for c in data.crops %}<th>{{ c }}</th>{% endfor %}
+      <th>合計</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for y in data.years %}
+    <tr>
+      <th>{{ y }}</th>
+      {% for c in data.crops %}
+        {% set v = data.summary[y].get(c, 0) %}
+        {% set n = data.counts[y].get(c, 0) %}
+        <td title="{{ n }} ほ場">{{ "%.2f"|format(v) if v else "" }}</td>
+      {% endfor %}
+      <td class="total">{{ "%.2f"|format(data.year_total[y]) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="hint">セルの数値は ha、ホバーで該当ほ場数を表示。「合計」は年別の作付面積総計。</p>
+{% endif %}
+{% endblock %}
