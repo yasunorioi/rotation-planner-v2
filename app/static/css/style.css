@@ -93,3 +93,7 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .form-actions button { padding: 0.6rem 1.5rem; font-size: 1rem; background: #2d6a4f; color: #fff; border: none; border-radius: 4px; }
 .add-crop-form { margin-top: 2rem; }
 .add-crop-form h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+.import-block { margin-top: 2rem; padding: 1rem; background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; }
+.import-block h3 { margin-top: 0; font-size: 1rem; }
+.import-block h3 small { font-weight: normal; font-size: 0.85rem; }
+.import-result { margin-top: 0.5rem; }

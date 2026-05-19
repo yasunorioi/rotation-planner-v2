@@ -466,6 +466,83 @@ def test_result_csv_download(app_client):
     assert "R8" in text and "R9" in text
 
 
+def test_csv_template_download(app_client):
+    r = app_client.get("/fields/template.csv")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers.get("content-type", "")
+    text = r.content.decode("utf-8-sig")
+    assert "ほ場ID" in text and "area" in text
+
+
+def test_csv_import_creates_fields_and_history(app_client):
+    csv_text = (
+        "ほ場ID,地区,ほ場名,area,beet_forbidden,R5,R6,R7\n"
+        "I001,北地区,北1号,280,0,大豆,てんさい,小麦(秋播)\n"
+        "I002,南地区,南2号,310,1,てんさい,大豆,\n"
+    )
+    r = app_client.post(
+        "/fields/import",
+        files={"file": ("fields.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 200
+    assert "追加 2" in r.text
+    assert "履歴 5" in r.text  # 大豆/てんさい/小麦 + てんさい/大豆
+
+    # 一覧で確認
+    r = app_client.get("/fields/")
+    assert "I001" in r.text and "北1号" in r.text
+    assert "I002" in r.text
+    # area: 280a → 2.80ha
+    assert "2.80" in r.text
+    # 履歴
+    r = app_client.get("/history/?from=R5&to=R7")
+    assert "大豆" in r.text and "てんさい" in r.text
+
+
+def test_csv_import_upsert_existing_field(app_client):
+    # 既存
+    r = app_client.post(
+        "/fields/",
+        data={"field_code": "U001", "name": "旧名称", "area_ha": "1.0"},
+    )
+    assert r.status_code == 200
+    # CSV で同じ field_code を更新
+    csv_text = "ほ場ID,地区,ほ場名,area,beet_forbidden\nU001,新地区,新名称,500,1\n"
+    r = app_client.post(
+        "/fields/import",
+        files={"file": ("u.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+    )
+    assert "更新 1" in r.text
+    r = app_client.get("/fields/")
+    assert "新名称" in r.text
+    assert "旧名称" not in r.text
+    assert "5.00" in r.text  # 500a → 5.00ha
+
+
+def test_csv_import_handles_invalid_rows(app_client):
+    csv_text = (
+        "ほ場ID,area\n"
+        "GOOD,150\n"
+        ",100\n"  # field_code 空 → error
+        "BAD,abc\n"  # area 不正 → error
+    )
+    r = app_client.post(
+        "/fields/import",
+        files={"file": ("e.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+    )
+    assert "追加 1" in r.text
+    assert "エラー 2" in r.text
+
+
+def test_csv_import_rejects_missing_required_columns(app_client):
+    csv_text = "ほ場名\nA\n"  # field_code, area 両方欠落
+    r = app_client.post(
+        "/fields/import",
+        files={"file": ("bad.csv", csv_text.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 400
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

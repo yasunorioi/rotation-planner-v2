@@ -18,4 +18,14 @@
 <div id="field-form-slot">
   <button hx-get="/fields/new" hx-target="#field-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
 </div>
+
+<div class="import-block">
+  <h3>CSV 取込 <small><a href="/fields/template.csv">テンプレートをダウンロード</a></small></h3>
+  <form hx-post="/fields/import" hx-encoding="multipart/form-data"
+        hx-target="#import-result" hx-swap="innerHTML">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">アップロード</button>
+  </form>
+  <div id="import-result"></div>
+</div>
 {% endblock %}
