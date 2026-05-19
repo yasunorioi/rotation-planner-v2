@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ plan.name }} — 輪作計画{% endblock %}
+{% block content %}
+<p><a href="/plans/">← 計画一覧</a></p>
+<h2>{{ plan.name }}</h2>
+<p>対象年度: {{ plan.start_year }} 〜 {{ plan.end_year }}</p>
+
+<div class="optimize-toolbar">
+  <button hx-post="/plans/{{ plan.id }}/optimize"
+          hx-target="#optimize-result" hx-swap="innerHTML"
+          hx-indicator="#optimize-spinner">計画を生成</button>
+  <span id="optimize-spinner" class="htmx-indicator">… 最適化計算中（数秒待ち）</span>
+</div>
+
+<div id="optimize-result"></div>
+{% endblock %}

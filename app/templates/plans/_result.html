@@ -1,0 +1,40 @@
+{% if not result.ok %}
+<p class="error-msg">⚠️ {{ result.message }}</p>
+{% else %}
+<p class="result-msg">{{ result.message }}</p>
+
+<table class="rotation-result">
+  <thead>
+    <tr>
+      <th>圃場</th>
+      {% for y in result.past_years %}<th class="past">{{ y }}</th>{% endfor %}
+      {% for y in result.future_years %}<th class="future">{{ y }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for code in result.field_codes %}
+    <tr>
+      <th class="field-label">{{ code }}</th>
+      {% for y in result.past_years %}
+        {% set crop = result.grid.get((code, y), "") %}
+        <td class="past-cell">{{ crop }}</td>
+      {% endfor %}
+      {% for y in result.future_years %}
+        {% set crop = result.grid.get((code, y), "") %}
+        <td class="future-cell {% if not crop %}empty{% endif %}">{{ crop or "—" }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if result.errors %}
+<details class="warnings">
+  <summary>⚠️ 警告/違反 {{ result.errors|length }}件</summary>
+  <ul>
+    {% for e in result.errors[:20] %}<li>{{ e }}</li>{% endfor %}
+    {% if result.errors|length > 20 %}<li>… 他 {{ result.errors|length - 20 }} 件</li>{% endif %}
+  </ul>
+</details>
+{% endif %}
+{% endif %}

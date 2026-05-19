@@ -283,6 +283,85 @@ def test_plans_count_on_dashboard(app_client):
     assert ">2</span><span class=\"lbl\">輪作計画" in r.text
 
 
+def test_plan_detail_page(app_client):
+    r = app_client.post("/plans/", data={"name": "詳細テスト", "start_year": "R8", "end_year": "R10"})
+    import re
+    plan_id = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{plan_id}")
+    assert r.status_code == 200
+    assert "詳細テスト" in r.text
+    assert "計画を生成" in r.text
+    assert f"/plans/{plan_id}/optimize" in r.text
+
+
+def test_optimize_empty_fields_returns_error(app_client):
+    r = app_client.post("/plans/", data={"name": "空計画", "start_year": "R8", "end_year": "R9"})
+    import re
+    plan_id = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.post(f"/plans/{plan_id}/optimize")
+    assert r.status_code == 200
+    assert "ほ場が登録されていません" in r.text
+
+
+def test_optimize_runs_endtoend(app_client):
+    # ほ場 3つ
+    for i, code in enumerate(["F1", "F2", "F3"], start=1):
+        app_client.post("/fields/", data={"field_code": code, "name": f"圃{i}", "area_ha": "2.0"})
+    # 過去履歴
+    fids = {}
+    r = app_client.get("/fields/")
+    import re
+    for code in ["F1", "F2", "F3"]:
+        m = re.search(rf'id="field-(\d+)".+?{code}', r.text, re.DOTALL)
+        fids[code] = int(m.group(1))
+    history_entries = [
+        (fids["F1"], "R6", "だいず"),
+        (fids["F1"], "R7", "てんさい"),
+        (fids["F2"], "R6", "てんさい"),
+        (fids["F2"], "R7", "小麦(秋播)"),
+        (fids["F3"], "R7", "ばれいしょ"),
+    ]
+    for fid, y, crop in history_entries:
+        app_client.post(
+            "/history/cell",
+            data={"field_id": fid, "year": y, "crop": crop},
+        )
+    # 計画 R8〜R10
+    r = app_client.post("/plans/", data={"name": "実行テスト", "start_year": "R8", "end_year": "R10"})
+    plan_id = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 最適化
+    r = app_client.post(f"/plans/{plan_id}/optimize")
+    assert r.status_code == 200
+    assert "スコア" in r.text
+    # ピボット表に過去年と将来年が並ぶ
+    for y in ["R6", "R7", "R8", "R9", "R10"]:
+        assert f">{y}</th>" in r.text
+    # 圃場コードが並ぶ
+    for code in ["F1", "F2", "F3"]:
+        assert f">{code}</th>" in r.text
+    # 過去履歴が表示される
+    assert "だいず" in r.text or "てんさい" in r.text
+
+
+def test_optimize_404_for_other_user(app_client):
+    r = app_client.post("/plans/", data={"name": "私の計画", "start_year": "R8", "end_year": "R9"})
+    import re
+    plan_id = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    import hashlib, sqlite3, os
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    assert app_client.get(f"/plans/{plan_id}").status_code == 404
+    assert app_client.post(f"/plans/{plan_id}/optimize").status_code == 404
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

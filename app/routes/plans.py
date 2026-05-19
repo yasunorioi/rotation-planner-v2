@@ -75,10 +75,23 @@ def edit_plan_form(request: Request, user: CurrentUser, plan_id: int):
     return templates.TemplateResponse(request, "plans/_form.html", {"plan": plan})
 
 
-@router.get("/{plan_id}", response_class=HTMLResponse)
-def get_plan_row(request: Request, user: CurrentUser, plan_id: int):
+@router.get("/{plan_id}")
+def plan_detail(request: Request, user: CurrentUser, plan_id: int):
     plan = _fetch_plan(user["id"], plan_id)
-    return templates.TemplateResponse(request, "plans/_row.html", {"plan": plan})
+    return templates.TemplateResponse(
+        request, "plans/detail.html", {"user": user, "plan": plan}
+    )
+
+
+@router.post("/{plan_id}/optimize", response_class=HTMLResponse)
+def optimize_plan(request: Request, user: CurrentUser, plan_id: int):
+    plan = _fetch_plan(user["id"], plan_id)
+    from app.optimizer_service import run_optimization_for_plan
+
+    result = run_optimization_for_plan(user["id"], plan)
+    return templates.TemplateResponse(
+        request, "plans/_result.html", {"plan": plan, "result": result}
+    )
 
 
 @router.put("/{plan_id}", response_class=HTMLResponse)
