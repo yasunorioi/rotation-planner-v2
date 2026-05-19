@@ -221,6 +221,55 @@ def download_template():
     )
 
 
+@router.get("/polygons.geojson")
+def export_polygons_geojson(user: CurrentUser):
+    """ユーザーのほ場ポリゴンを GeoJSON FeatureCollection として返す。"""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id, field_code, name, district, area_ha, coordinates_json "
+            "FROM fields WHERE user_id = ? AND coordinates_json IS NOT NULL "
+            "ORDER BY field_code",
+            (user["id"],),
+        ).fetchall()
+    features = []
+    for r in rows:
+        try:
+            feat = json.loads(r["coordinates_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        geom = feat.get("geometry") if feat.get("type") == "Feature" else feat
+        if not geom or geom.get("type") != "Polygon":
+            continue
+        features.append({
+            "type": "Feature",
+            "geometry": geom,
+            "properties": {
+                "id": r["id"],
+                "field_code": r["field_code"],
+                "name": r["name"] or "",
+                "district": r["district"] or "",
+                "area_ha": r["area_ha"],
+            },
+        })
+    body = json.dumps(
+        {"type": "FeatureCollection", "features": features},
+        ensure_ascii=False,
+        indent=2,
+    )
+    return Response(
+        body.encode("utf-8"),
+        media_type="application/geo+json",
+        headers={"Content-Disposition": 'attachment; filename="fields.geojson"'},
+    )
+
+
+@router.get("/map")
+def fields_map(request: Request, user: CurrentUser):
+    return templates.TemplateResponse(
+        request, "fields/map.html", {"user": user}
+    )
+
+
 @router.get("/export.csv")
 def export_fields_csv(
     user: CurrentUser,

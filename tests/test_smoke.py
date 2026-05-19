@@ -822,6 +822,57 @@ def test_pesticide_records_filter_by_field(app_client):
     assert "Aの薬" in r.text and "Bの薬" not in r.text
 
 
+def test_polygons_geojson_export(app_client):
+    fid_a = _make_field(app_client, "G1")
+    fid_b = _make_field(app_client, "G2")
+    # G1 にのみポリゴン
+    import json
+    poly = {"type": "Feature", "geometry": {"type": "Polygon",
+            "coordinates": [[[141, 43], [142, 43], [142, 44], [141, 43]]]}}
+    app_client.post(f"/fields/{fid_a}/polygon", data={"geojson": json.dumps(poly)})
+
+    r = app_client.get("/fields/polygons.geojson")
+    assert r.status_code == 200
+    assert "geo+json" in r.headers.get("content-type", "")
+    fc = r.json()
+    assert fc["type"] == "FeatureCollection"
+    # ポリゴンを持つほ場のみ
+    assert len(fc["features"]) == 1
+    p = fc["features"][0]["properties"]
+    assert p["field_code"] == "G1"
+    assert p["id"] == fid_a
+
+
+def test_polygons_geojson_user_isolation(app_client):
+    fid = _make_field(app_client, "ISO")
+    import json, hashlib, sqlite3, os
+    poly = {"type": "Feature", "geometry": {"type": "Polygon",
+            "coordinates": [[[141, 43], [142, 43], [142, 44], [141, 43]]]}}
+    app_client.post(f"/fields/{fid}/polygon", data={"geojson": json.dumps(poly)})
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    r = app_client.get("/fields/polygons.geojson")
+    assert r.status_code == 200
+    fc = r.json()
+    assert fc["features"] == []
+
+
+def test_fields_map_page(app_client):
+    r = app_client.get("/fields/map")
+    assert r.status_code == 200
+    assert "ほ場マップ" in r.text
+    assert "leaflet.css" in r.text
+    assert "/fields/polygons.geojson" in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る
