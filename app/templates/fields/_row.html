@@ -1,0 +1,15 @@
+<tr id="field-{{ field.id }}">
+  <td>{{ field.field_code }}</td>
+  <td>{{ field.district or "" }}</td>
+  <td>{{ field.name or "" }}</td>
+  <td>{{ "%.2f"|format(field.area_ha) }}</td>
+  <td>{{ "✓" if field.beet_forbidden else "" }}</td>
+  <td>{{ field.notes or "" }}</td>
+  <td>
+    <button hx-get="/fields/{{ field.id }}/edit"
+            hx-target="#field-form-slot" hx-swap="innerHTML">編集</button>
+    <button hx-delete="/fields/{{ field.id }}"
+            hx-target="#field-{{ field.id }}" hx-swap="outerHTML"
+            hx-confirm="削除しますか？">削除</button>
+  </td>
+</tr>

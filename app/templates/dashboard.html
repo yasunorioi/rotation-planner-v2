@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}ダッシュボード{% endblock %}
+{% block content %}
+<h2>ダッシュボード</h2>
+<div class="stats">
+  <div class="stat"><span class="num">{{ field_count }}</span><span class="lbl">ほ場</span></div>
+  <div class="stat"><span class="num">{{ plan_count }}</span><span class="lbl">輪作計画</span></div>
+  <div class="stat"><span class="num">{{ history_count }}</span><span class="lbl">作付履歴</span></div>
+</div>
+{% endblock %}

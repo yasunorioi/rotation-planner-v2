@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}rotation-planner v2{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<header>
+  <h1><a href="/">rotation-planner v2</a></h1>
+  <nav>
+    <a href="/">ダッシュボード</a>
+    <a href="/fields/">ほ場</a>
+  </nav>
+  {% if user %}<small>{{ user.display_name }} ({{ user.role }})</small>{% endif %}
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>
