@@ -34,13 +34,42 @@ _FIELD_COLS = (
 )
 
 
-def _fetch_fields(user_id: int) -> list[dict]:
+def _build_field_filter(district: str | None, polygon: str | None) -> tuple[str, list]:
+    clauses = ["user_id = ?"]
+    params: list = []
+    if district:
+        clauses.append("district = ?")
+        params.append(district)
+    if polygon == "有":
+        clauses.append("coordinates_json IS NOT NULL")
+    elif polygon == "無":
+        clauses.append("coordinates_json IS NULL")
+    return " AND ".join(clauses), params
+
+
+def _fetch_fields(
+    user_id: int,
+    district: str | None = None,
+    polygon: str | None = None,
+) -> list[dict]:
+    where_sql, params = _build_field_filter(district, polygon)
     with connect() as conn:
         rows = conn.execute(
-            f"SELECT {_FIELD_COLS} FROM fields WHERE user_id = ? ORDER BY field_code",
-            (user_id,),
+            f"SELECT {_FIELD_COLS} FROM fields WHERE {where_sql} ORDER BY field_code",
+            ([user_id] + params),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _distinct_districts(user_id: int) -> list[str]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT district FROM fields "
+            "WHERE user_id = ? AND district IS NOT NULL AND district != '' "
+            "ORDER BY district",
+            (user_id,),
+        ).fetchall()
+    return [r["district"] for r in rows]
 
 
 def _fetch_field(user_id: int, field_id: int) -> dict:
@@ -55,10 +84,24 @@ def _fetch_field(user_id: int, field_id: int) -> dict:
 
 
 @router.get("/")
-def list_fields(request: Request, user: CurrentUser):
-    fields = _fetch_fields(user["id"])
+def list_fields(
+    request: Request,
+    user: CurrentUser,
+    district: str | None = None,
+    polygon: str | None = None,
+):
+    fields = _fetch_fields(user["id"], district=district, polygon=polygon)
+    districts = _distinct_districts(user["id"])
     return templates.TemplateResponse(
-        request, "fields/list.html", {"user": user, "fields": fields}
+        request,
+        "fields/list.html",
+        {
+            "user": user,
+            "fields": fields,
+            "districts": districts,
+            "filter_district": district or "",
+            "filter_polygon": polygon or "",
+        },
     )
 
 
@@ -179,13 +222,19 @@ def download_template():
 
 
 @router.get("/export.csv")
-def export_fields_csv(user: CurrentUser):
-    """ほ場 (+ 履歴) を CSV エクスポート。インポート CSV と互換。"""
+def export_fields_csv(
+    user: CurrentUser,
+    district: str | None = None,
+    polygon: str | None = None,
+):
+    """ほ場 (+ 履歴) を CSV エクスポート。インポート CSV と互換。
+    一覧と同じ district/polygon フィルタが効く。"""
+    where_sql, params = _build_field_filter(district, polygon)
     with connect() as conn:
         fields = conn.execute(
-            "SELECT id, field_code, district, name, area_ha, beet_forbidden, notes "
-            "FROM fields WHERE user_id = ? ORDER BY field_code",
-            (user["id"],),
+            f"SELECT id, field_code, district, name, area_ha, beet_forbidden, notes "
+            f"FROM fields WHERE {where_sql} ORDER BY field_code",
+            ([user["id"]] + params),
         ).fetchall()
         rows = conn.execute(
             "SELECT h.field_id, h.year, h.crop FROM crop_history h "

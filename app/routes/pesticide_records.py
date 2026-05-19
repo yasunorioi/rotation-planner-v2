@@ -31,24 +31,53 @@ SELECT r.id, r.field_id, r.spray_date, r.pesticide_name, r.dilution_rate,
        f.field_code, f.name AS field_name
 FROM pesticide_records r
 JOIN fields f ON r.field_id = f.id
-WHERE r.user_id = ?
 """
 
 
-def _fetch_records(user_id: int) -> list[dict]:
+def _build_record_filter(user_id: int, year: str | None, field_id: int | None) -> tuple[str, list]:
+    clauses = ["r.user_id = ?"]
+    params: list = [user_id]
+    if year:
+        clauses.append("strftime('%Y', r.spray_date) = ?")
+        params.append(year)
+    if field_id:
+        clauses.append("r.field_id = ?")
+        params.append(field_id)
+    return " WHERE " + " AND ".join(clauses), params
+
+
+def _fetch_records(
+    user_id: int,
+    year: str | None = None,
+    field_id: int | None = None,
+) -> list[dict]:
+    where_sql, params = _build_record_filter(user_id, year, field_id)
     with connect() as conn:
         rows = conn.execute(
-            _SELECT + " ORDER BY r.spray_date DESC, r.id DESC", (user_id,)
+            _SELECT + where_sql + " ORDER BY r.spray_date DESC, r.id DESC",
+            params,
         ).fetchall()
     return [dict(r) for r in rows]
 
 
 def _fetch_record(user_id: int, rec_id: int) -> dict:
     with connect() as conn:
-        row = conn.execute(_SELECT + " AND r.id = ?", (user_id, rec_id)).fetchone()
+        row = conn.execute(
+            _SELECT + " WHERE r.user_id = ? AND r.id = ?", (user_id, rec_id)
+        ).fetchone()
     if row is None:
         raise HTTPException(404, "防除記録が見つかりません")
     return dict(row)
+
+
+def _available_years(user_id: int) -> list[str]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT strftime('%Y', spray_date) AS y FROM pesticide_records "
+            "WHERE user_id = ? ORDER BY y DESC",
+            (user_id,),
+        ).fetchall()
+    return [r["y"] for r in rows if r["y"]]
 
 
 def _user_fields(user_id: int) -> list[dict]:
@@ -69,13 +98,25 @@ def _ensure_field_owned(conn, user_id: int, field_id: int) -> None:
 
 
 @router.get("/")
-def list_records(request: Request, user: CurrentUser):
-    records = _fetch_records(user["id"])
+def list_records(
+    request: Request,
+    user: CurrentUser,
+    year: str | None = None,
+    field_id: int | None = None,
+):
+    records = _fetch_records(user["id"], year=year, field_id=field_id)
     fields = _user_fields(user["id"])
     return templates.TemplateResponse(
         request,
         "pesticide_records/list.html",
-        {"user": user, "records": records, "fields": fields},
+        {
+            "user": user,
+            "records": records,
+            "fields": fields,
+            "available_years": _available_years(user["id"]),
+            "filter_year": year or "",
+            "filter_field_id": field_id or "",
+        },
     )
 
 
@@ -233,8 +274,12 @@ async def import_records(
 
 
 @router.get("/export.csv")
-def export_csv(user: CurrentUser):
-    records = _fetch_records(user["id"])
+def export_csv(
+    user: CurrentUser,
+    year: str | None = None,
+    field_id: int | None = None,
+):
+    records = _fetch_records(user["id"], year=year, field_id=field_id)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["散布日", "ほ場ID", "ほ場名", "農薬名", "希釈倍率", "量", "単位", "備考"])

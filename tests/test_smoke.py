@@ -757,6 +757,71 @@ def test_pesticide_import_rejects_missing_columns(app_client):
     assert r.status_code == 400
 
 
+def test_fields_filter_by_district(app_client):
+    csv_in = (
+        "ほ場ID,地区,ほ場名,area\n"
+        "FD1,北,北1,200\n"
+        "FD2,北,北2,200\n"
+        "FD3,南,南1,200\n"
+    )
+    app_client.post("/fields/import", files={"file": ("f.csv", csv_in.encode("utf-8-sig"), "text/csv")})
+    r = app_client.get("/fields/?district=北")
+    assert "FD1" in r.text and "FD2" in r.text and "FD3" not in r.text
+    assert "該当 2 件" in r.text
+    # エクスポートも絞り込みが効く
+    r = app_client.get("/fields/export.csv?district=北")
+    text = r.content.decode("utf-8-sig")
+    assert "FD1" in text and "FD2" in text and "FD3" not in text
+
+
+def test_fields_filter_by_polygon(app_client):
+    fid1 = _make_field(app_client, "PG1")
+    _make_field(app_client, "PG2")
+    poly = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[141,43],[142,43],[142,44],[141,43]]]}}
+    import json
+    app_client.post(f"/fields/{fid1}/polygon", data={"geojson": json.dumps(poly)})
+    r = app_client.get("/fields/?polygon=有")
+    assert "PG1" in r.text and "PG2" not in r.text
+    r = app_client.get("/fields/?polygon=無")
+    assert "PG2" in r.text and "PG1" not in r.text
+
+
+def test_pesticide_records_filter_by_year(app_client):
+    fid = _make_field(app_client, "PR1")
+    for date, name in [
+        ("2025-04-10", "薬A"),
+        ("2026-05-10", "薬B"),
+        ("2026-06-10", "薬C"),
+    ]:
+        app_client.post(
+            "/pesticide-records/",
+            data={"field_id": fid, "spray_date": date, "pesticide_name": name,
+                  "dilution_rate": "", "spray_amount": "", "spray_unit": "", "notes": ""},
+        )
+    r = app_client.get("/pesticide-records/?year=2026")
+    assert "薬B" in r.text and "薬C" in r.text and "薬A" not in r.text
+    assert "該当 2 件" in r.text
+    # エクスポートも
+    r = app_client.get("/pesticide-records/export.csv?year=2026")
+    text = r.content.decode("utf-8-sig")
+    assert "薬B" in text and "薬C" in text and "薬A" not in text
+
+
+def test_pesticide_records_filter_by_field(app_client):
+    fid_a = _make_field(app_client, "PA")
+    fid_b = _make_field(app_client, "PB")
+    app_client.post("/pesticide-records/", data={
+        "field_id": fid_a, "spray_date": "2026-05-01", "pesticide_name": "Aの薬",
+        "dilution_rate": "", "spray_amount": "", "spray_unit": "", "notes": "",
+    })
+    app_client.post("/pesticide-records/", data={
+        "field_id": fid_b, "spray_date": "2026-05-01", "pesticide_name": "Bの薬",
+        "dilution_rate": "", "spray_amount": "", "spray_unit": "", "notes": "",
+    })
+    r = app_client.get(f"/pesticide-records/?field_id={fid_a}")
+    assert "Aの薬" in r.text and "Bの薬" not in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

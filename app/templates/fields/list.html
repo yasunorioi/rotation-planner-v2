@@ -2,6 +2,29 @@
 {% block title %}ほ場一覧{% endblock %}
 {% block content %}
 <h2>ほ場一覧</h2>
+
+<form method="get" action="/fields/" class="filter-bar">
+  <label>地区
+    <select name="district">
+      <option value="">（全て）</option>
+      {% for d in districts %}
+        <option value="{{ d }}" {% if d == filter_district %}selected{% endif %}>{{ d }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>ポリゴン
+    <select name="polygon">
+      <option value="">（全て）</option>
+      <option value="有" {% if filter_polygon == "有" %}selected{% endif %}>有</option>
+      <option value="無" {% if filter_polygon == "無" %}selected{% endif %}>無</option>
+    </select>
+  </label>
+  <button type="submit">絞り込み</button>
+  {% if filter_district or filter_polygon %}<a href="/fields/" class="csv-link">クリア</a>{% endif %}
+</form>
+
+<p class="hint">該当 {{ fields|length }} 件</p>
+
 <table id="fields-table">
   <thead>
     <tr>
@@ -23,7 +46,7 @@
   <h3>CSV 取込/出力
     <small>
       <a href="/fields/template.csv">テンプレート</a> |
-      <a href="/fields/export.csv">エクスポート</a>
+      <a href="/fields/export.csv{% if filter_district or filter_polygon %}?{% if filter_district %}district={{ filter_district|urlencode }}{% endif %}{% if filter_district and filter_polygon %}&{% endif %}{% if filter_polygon %}polygon={{ filter_polygon|urlencode }}{% endif %}{% endif %}">エクスポート</a>
     </small>
   </h3>
   <form hx-post="/fields/import" hx-encoding="multipart/form-data"

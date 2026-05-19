@@ -103,3 +103,7 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .import-block h3 { margin-top: 0; font-size: 1rem; }
 .import-block h3 small { font-weight: normal; font-size: 0.85rem; }
 .import-result { margin-top: 0.5rem; }
+.filter-bar { background: none; border: none; padding: 0; margin: 0 0 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.filter-bar label { display: flex; gap: 0.3rem; align-items: center; font-size: 0.9rem; }
+.filter-bar select { padding: 0.25rem; }
+.csv-link { color: #2d6a4f; }

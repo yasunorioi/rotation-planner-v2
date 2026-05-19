@@ -3,11 +3,34 @@
 {% block content %}
 <h2>防除記録</h2>
 
+<form method="get" action="/pesticide-records/" class="filter-bar">
+  <label>年
+    <select name="year">
+      <option value="">（全て）</option>
+      {% for y in available_years %}
+        <option value="{{ y }}" {% if y == filter_year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>ほ場
+    <select name="field_id">
+      <option value="">（全て）</option>
+      {% for f in fields %}
+        <option value="{{ f.id }}" {% if f.id == filter_field_id %}selected{% endif %}>{{ f.field_code }} {{ f.name or "" }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">絞り込み</button>
+  {% if filter_year or filter_field_id %}<a href="/pesticide-records/" class="csv-link">クリア</a>{% endif %}
+</form>
+
+<p class="hint">該当 {{ records|length }} 件</p>
+
 <div class="import-block">
   <h3>CSV 取込/出力
     <small>
       <a href="/pesticide-records/template.csv">テンプレート</a> |
-      <a href="/pesticide-records/export.csv">エクスポート</a>
+      <a href="/pesticide-records/export.csv{% if filter_year or filter_field_id %}?{% if filter_year %}year={{ filter_year }}{% endif %}{% if filter_year and filter_field_id %}&{% endif %}{% if filter_field_id %}field_id={{ filter_field_id }}{% endif %}{% endif %}">エクスポート</a>
     </small>
   </h3>
   <form hx-post="/pesticide-records/import" hx-encoding="multipart/form-data"
