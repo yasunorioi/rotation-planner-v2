@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}制約設定 — {{ plan.name }}{% endblock %}
+{% block content %}
+<p><a href="/plans/{{ plan.id }}">← {{ plan.name }} に戻る</a></p>
+<h2>制約設定 — {{ plan.name }}</h2>
+<p class="hint">空欄: 「制約なし」。min_gap_years/min_fields は 0 で制約なし。max_fields の空欄は上限なし。</p>
+
+<form id="constraints-form" method="post" action="/plans/{{ plan.id }}/constraints">
+  <table class="constraints-table">
+    <thead>
+      <tr>
+        <th>作物</th>
+        <th>min_ha</th>
+        <th>cap_ha</th>
+        <th>min_gap_years</th>
+        <th>min_fields</th>
+        <th>max_fields</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for crop, c in constraints.items() %}
+      <tr>
+        <td>
+          <input type="hidden" name="crop" value="{{ crop }}">
+          {{ crop }}
+        </td>
+        <td><input name="min_ha" type="number" step="0.1" value="{{ '' if c.min_ha is none else c.min_ha }}"></td>
+        <td><input name="cap_ha" type="number" step="0.1" value="{{ '' if c.cap_ha is none else c.cap_ha }}"></td>
+        <td><input name="min_gap_years" type="number" min="0" value="{{ c.min_gap_years or 0 }}"></td>
+        <td><input name="min_fields" type="number" min="0" value="{{ c.min_fields or 0 }}"></td>
+        <td><input name="max_fields" type="number" min="0" value="{{ '' if c.max_fields is none else c.max_fields }}"></td>
+        <td>
+          <button type="submit" form="remove-form-{{ loop.index }}" class="remove-btn">削除</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="form-actions">
+    <button type="submit">保存</button>
+  </div>
+</form>
+
+{# 行ごとの削除フォーム (メインフォームと入れ子にならないよう外側に出す) #}
+{% for crop in constraints %}
+<form id="remove-form-{{ loop.index }}" method="post"
+      action="/plans/{{ plan.id }}/constraints/remove" hidden>
+  <input name="crop" value="{{ crop }}">
+</form>
+{% endfor %}
+
+<form method="post" action="/plans/{{ plan.id }}/constraints/add" class="add-crop-form">
+  <h3>作物を追加</h3>
+  <label>作物名 <input name="new_crop" required></label>
+  <button type="submit">追加</button>
+</form>
+{% endblock %}

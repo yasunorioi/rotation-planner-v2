@@ -362,6 +362,110 @@ def test_optimize_404_for_other_user(app_client):
     assert app_client.post(f"/plans/{plan_id}/optimize").status_code == 404
 
 
+def test_constraints_editor_page(app_client):
+    r = app_client.post("/plans/", data={"name": "C1", "start_year": "R8", "end_year": "R10"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{pid}/constraints")
+    assert r.status_code == 200
+    assert "制約設定" in r.text
+    # デフォルト作物が表示される
+    assert "てんさい" in r.text
+    assert "min_gap_years" in r.text
+
+
+def test_constraints_save_and_reload(app_client):
+    r = app_client.post("/plans/", data={"name": "C2", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 最初は constraints_json = NULL → デフォルト
+    # 全 crops を 取得して送り直す（てんさい だけ修正）
+    r = app_client.get(f"/plans/{pid}/constraints")
+    # parse the form
+    rows = re.findall(r'<input type="hidden" name="crop" value="([^"]+)">', r.text)
+    assert "てんさい" in rows
+    # POST: てんさい の min_gap_years を 5 に書き換え
+    data = {
+        "crop": rows,
+        "min_ha": ["" for _ in rows],
+        "cap_ha": ["" for _ in rows],
+        "min_gap_years": ["5" if c == "てんさい" else "0" for c in rows],
+        "min_fields": ["0" for _ in rows],
+        "max_fields": ["" for _ in rows],
+    }
+    r = app_client.post(f"/plans/{pid}/constraints", data=data, follow_redirects=False)
+    assert r.status_code == 303
+    # 再読込で 5 になっている
+    r = app_client.get(f"/plans/{pid}/constraints")
+    # 表に value="5" を含む行が存在
+    assert 'value="5"' in r.text
+
+
+def test_constraints_add_and_remove_crop(app_client):
+    r = app_client.post("/plans/", data={"name": "C3", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 追加
+    r = app_client.post(
+        f"/plans/{pid}/constraints/add",
+        data={"new_crop": "そば"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    r = app_client.get(f"/plans/{pid}/constraints")
+    assert "そば" in r.text
+    # 削除
+    r = app_client.post(
+        f"/plans/{pid}/constraints/remove",
+        data={"crop": "そば"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    r = app_client.get(f"/plans/{pid}/constraints")
+    # crop 行として残っていない
+    rows = re.findall(r'<input type="hidden" name="crop" value="([^"]+)">', r.text)
+    assert "そば" not in rows
+
+
+def test_optimizer_uses_saved_constraints(app_client):
+    # ほ場 1つ
+    app_client.post("/fields/", data={"field_code": "K1", "name": "畑1", "area_ha": "1.0"})
+    # 計画
+    r = app_client.post("/plans/", data={"name": "C4", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 制約: そば だけにする → 結果が「そば」だけになるはず (連作禁止違反は出るが)
+    # まず全 crops 削除して そば だけ追加
+    r = app_client.get(f"/plans/{pid}/constraints")
+    rows = re.findall(r'<input type="hidden" name="crop" value="([^"]+)">', r.text)
+    for crop in rows:
+        app_client.post(
+            f"/plans/{pid}/constraints/remove",
+            data={"crop": crop},
+        )
+    app_client.post(f"/plans/{pid}/constraints/add", data={"new_crop": "そば"})
+    # 最適化
+    r = app_client.post(f"/plans/{pid}/optimize")
+    assert r.status_code == 200
+    assert "そば" in r.text
+
+
+def test_result_csv_download(app_client):
+    app_client.post("/fields/", data={"field_code": "Z1", "name": "畑Z1", "area_ha": "1.5"})
+    r = app_client.post("/plans/", data={"name": "C5", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{pid}/result.csv")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers.get("content-type", "")
+    # BOM 付き UTF-8 + Z1 が含まれる
+    body = r.content
+    assert body.startswith(b"\xef\xbb\xbf")
+    text = body.decode("utf-8-sig")
+    assert "Z1" in text
+    assert "R8" in text and "R9" in text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

@@ -3,7 +3,13 @@
 {% block content %}
 <p><a href="/plans/">← 計画一覧</a></p>
 <h2>{{ plan.name }}</h2>
-<p>対象年度: {{ plan.start_year }} 〜 {{ plan.end_year }}</p>
+<p>
+  対象年度: {{ plan.start_year }} 〜 {{ plan.end_year }}
+  &nbsp;|&nbsp;
+  <a href="/plans/{{ plan.id }}/constraints">制約設定</a>
+  &nbsp;|&nbsp;
+  <a href="/plans/{{ plan.id }}/result.csv">CSVダウンロード</a>
+</p>
 
 <div class="optimize-toolbar">
   <button hx-post="/plans/{{ plan.id }}/optimize"

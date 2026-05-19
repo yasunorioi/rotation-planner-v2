@@ -3,9 +3,59 @@
 ルーターから DB のレコードを optimizer.Field のリストに変換し、
 RotationPlannerORTools.solve() を回して結果を整形して返す。
 """
+import json
 from typing import Optional
 
 from app.db import connect
+
+
+def default_constraints_dict() -> dict:
+    """DEFAULT_CONSTRAINTS のコピー (編集可能な dict)。"""
+    from rotation_planner.app import DEFAULT_CONSTRAINTS
+    return {crop: dict(values) for crop, values in DEFAULT_CONSTRAINTS.items()}
+
+
+def load_constraints_dict(plan: dict) -> dict:
+    """plan.constraints_json があればそれを、なければデフォルトを返す。"""
+    raw = plan.get("constraints_json")
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+    return default_constraints_dict()
+
+
+def _to_optional_float(v) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(v, default: int = 0) -> int:
+    if v is None or v == "":
+        return default
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return default
+
+
+def constraints_from_dict(d: dict):
+    """JSON 由来の dict から optimizer.Constraints を構築する。"""
+    from rotation_planner.app import Constraints, FIXED_FORBIDDEN_TRANSITIONS
+    return Constraints(
+        crop_mins={k: _to_optional_float(v.get("min_ha")) for k, v in d.items()},
+        crop_caps={k: _to_optional_float(v.get("cap_ha")) for k, v in d.items()},
+        min_gap_years={k: _to_int(v.get("min_gap_years"), 0) for k, v in d.items()},
+        min_fields={k: _to_int(v.get("min_fields"), 0) for k, v in d.items()},
+        max_fields={k: (_to_int(v["max_fields"]) if v.get("max_fields") not in (None, "") else None)
+                    for k, v in d.items()},
+        forbidden_transitions=set(FIXED_FORBIDDEN_TRANSITIONS),
+    )
 
 
 def _parse_reiwa(y: str) -> Optional[int]:
@@ -36,12 +86,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
     """
     from rotation_planner.app import (
         RotationPlannerORTools,
-        Constraints,
-        DEFAULT_CONSTRAINTS,
-        FIXED_FORBIDDEN_TRANSITIONS,
         Field as OptField,
-        build_constraints_table,
-        parse_constraints_table,
     )
 
     start_n = _parse_reiwa(plan["start_year"])
@@ -92,17 +137,9 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
         )
         field_codes.append(f["field_code"])
 
-    crops = list(DEFAULT_CONSTRAINTS.keys())
-    table = build_constraints_table(crops)
-    crop_mins, crop_caps, min_gap, min_f, max_f = parse_constraints_table(table)
-    constraints = Constraints(
-        crop_mins=crop_mins,
-        crop_caps=crop_caps,
-        min_gap_years=min_gap,
-        min_fields=min_f,
-        max_fields=max_f,
-        forbidden_transitions=set(FIXED_FORBIDDEN_TRANSITIONS),
-    )
+    constraints_dict = load_constraints_dict(plan)
+    crops = list(constraints_dict.keys())
+    constraints = constraints_from_dict(constraints_dict)
 
     planner = RotationPlannerORTools(opt_fields, past_years, future_years, crops, constraints)
     plan_dict, score, errors = planner.solve(timeout_seconds=timeout_seconds, district_grouping=False)
