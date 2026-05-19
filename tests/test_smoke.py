@@ -76,6 +76,27 @@ def test_polygon_editor_page(app_client):
     assert '"geojson": null' in r.text or '"geojson":null' in r.text
 
 
+def test_polygon_indicator_in_list(app_client):
+    fid = _create_field(app_client)
+    # 最初はチェックなし
+    r = app_client.get("/fields/")
+    assert r.status_code == 200
+    import re
+    rows = re.findall(rf'id="field-{fid}".+?</tr>', r.text, re.DOTALL)
+    assert rows and "図</th>" not in rows[0]  # 列ヘッダではなくセルを確認したい
+    # 図列のセル: beet_forbidden 列 (空) のあと、notes 列の前
+    # ざっくり: ポリゴン保存前は ✓ がない (備考も空)
+    polygon = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[141, 43], [142, 43], [142, 44], [141, 43]]]}}
+    import json
+    app_client.post(f"/fields/{fid}/polygon", data={"geojson": json.dumps(polygon)})
+    r = app_client.get("/fields/")
+    rows = re.findall(rf'id="field-{fid}".+?</tr>', r.text, re.DOTALL)
+    # ✓ の数を数える: ポリゴン登録後は2つ以上 (てんさい禁忌は false でも図は ✓)
+    # ↑ 少なくとも図列に ✓ が現れる
+    cells = re.findall(r'<td[^>]*>(.*?)</td>', rows[0], re.DOTALL)
+    assert "✓" in cells, f"ポリゴン登録後の行に ✓ が見つからない: {cells}"
+
+
 def test_polygon_save_and_clear(app_client):
     fid = _create_field(app_client)
     polygon_feature = {

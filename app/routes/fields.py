@@ -15,11 +15,16 @@ router = APIRouter(prefix="/fields")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 
+_FIELD_COLS = (
+    "id, field_code, district, name, area_ha, beet_forbidden, notes, "
+    "(coordinates_json IS NOT NULL) AS has_polygon"
+)
+
+
 def _fetch_fields(user_id: int) -> list[dict]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id, field_code, district, name, area_ha, beet_forbidden, notes "
-            "FROM fields WHERE user_id = ? ORDER BY field_code",
+            f"SELECT {_FIELD_COLS} FROM fields WHERE user_id = ? ORDER BY field_code",
             (user_id,),
         ).fetchall()
     return [dict(r) for r in rows]
@@ -28,8 +33,7 @@ def _fetch_fields(user_id: int) -> list[dict]:
 def _fetch_field(user_id: int, field_id: int) -> dict:
     with connect() as conn:
         row = conn.execute(
-            "SELECT id, field_code, district, name, area_ha, beet_forbidden, notes "
-            "FROM fields WHERE id = ? AND user_id = ?",
+            f"SELECT {_FIELD_COLS} FROM fields WHERE id = ? AND user_id = ?",
             (field_id, user_id),
         ).fetchone()
     if row is None:
