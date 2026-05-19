@@ -4,11 +4,16 @@
 """
 import csv
 import io
+import re
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+
+_FIELD_CODE_ALIASES = {"ほ場ID", "field_code", "圃場コード", "field_id"}
+_NAME_ALIASES = {"ほ場名", "圃場名", "name"}
+_YEAR_PATTERN = re.compile(r"^R\d+$")
 
 from app.auth import CurrentUser
 from app.db import connect
@@ -77,6 +82,109 @@ def _read_cell(conn, field_id: int, year: str) -> str:
         (field_id, year),
     ).fetchone()
     return row["crop"] if row else ""
+
+
+@router.get("/template.csv")
+def history_template():
+    years = generate_year_choices(start_offset=-3, end_offset=2)
+    header = ["ほ場ID", "ほ場名"] + years
+    sample = ["F001", "北1号"] + ["" for _ in years]
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(header)
+    w.writerow(sample)
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="crop_history_template.csv"'},
+    )
+
+
+@router.post("/import")
+async def import_history(
+    request: Request,
+    user: CurrentUser,
+    file: UploadFile = File(...),
+):
+    """ピボット形式 (ほ場ID + R年列) の CSV を取り込んで履歴をupsert。
+    既存ほ場のみ対象。未登録の field_code はエラーとして記録。"""
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("cp932")
+        except UnicodeDecodeError:
+            raise HTTPException(400, "CSV のデコードに失敗")
+
+    reader = csv.reader(io.StringIO(text))
+    try:
+        headers = next(reader)
+    except StopIteration:
+        raise HTTPException(400, "CSV が空です")
+
+    code_col = None
+    year_cols: list[tuple[int, str]] = []
+    for i, h in enumerate(headers):
+        hs = (h or "").strip()
+        if hs in _FIELD_CODE_ALIASES:
+            code_col = i
+        elif _YEAR_PATTERN.match(hs):
+            year_cols.append((i, hs))
+    if code_col is None:
+        raise HTTPException(400, "ヘッダ「ほ場ID」が見つかりません")
+    if not year_cols:
+        raise HTTPException(400, "年列 (R5, R6 等) が見つかりません")
+
+    upserted = 0
+    deleted = 0
+    errors: list[str] = []
+
+    with connect() as conn:
+        field_map = {
+            r["field_code"]: r["id"]
+            for r in conn.execute(
+                "SELECT id, field_code FROM fields WHERE user_id = ?", (user["id"],)
+            ).fetchall()
+        }
+        for row_idx, row in enumerate(reader, start=2):
+            if not row or all((c or "").strip() == "" for c in row):
+                continue
+            if code_col >= len(row):
+                continue
+            code = row[code_col].strip()
+            if not code:
+                continue
+            field_db_id = field_map.get(code)
+            if field_db_id is None:
+                errors.append(f"{row_idx}行目: 未登録のほ場「{code}」")
+                continue
+            for col_idx, year in year_cols:
+                if col_idx >= len(row):
+                    continue
+                crop = row[col_idx].strip()
+                if crop:
+                    conn.execute(
+                        "INSERT INTO crop_history (field_id, year, crop) VALUES (?, ?, ?) "
+                        "ON CONFLICT(field_id, year) DO UPDATE SET crop = excluded.crop",
+                        (field_db_id, year, crop),
+                    )
+                    upserted += 1
+                else:
+                    result = conn.execute(
+                        "DELETE FROM crop_history WHERE field_id = ? AND year = ?",
+                        (field_db_id, year),
+                    )
+                    deleted += result.rowcount
+
+    summary = f"取込完了: upsert {upserted} / delete {deleted}"
+    if errors:
+        summary += f" / エラー {len(errors)} 件"
+    return templates.TemplateResponse(
+        request,
+        "history/_import_result.html",
+        {"summary": summary, "errors": errors[:20]},
+    )
 
 
 @router.get("/export.csv")

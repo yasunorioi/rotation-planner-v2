@@ -6,9 +6,17 @@ import csv
 import io
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
+
+_FIELD_CODE_ALIASES = {"ほ場ID", "field_code", "圃場コード", "field_id"}
+_DATE_ALIASES = {"散布日", "spray_date", "date"}
+_NAME_ALIASES = {"農薬名", "pesticide_name", "name"}
+_DIL_ALIASES = {"希釈倍率", "dilution_rate"}
+_AMOUNT_ALIASES = {"量", "spray_amount", "amount"}
+_UNIT_ALIASES = {"単位", "spray_unit", "unit"}
+_NOTES_ALIASES = {"備考", "notes", "メモ"}
 
 from app.auth import CurrentUser
 from app.db import connect
@@ -116,6 +124,111 @@ def create_record(
     record = _fetch_record(user["id"], rec_id)
     return templates.TemplateResponse(
         request, "pesticide_records/_row.html", {"record": record}
+    )
+
+
+@router.get("/template.csv")
+def pesticide_template():
+    header = "散布日,ほ場ID,農薬名,希釈倍率,量,単位,備考\n"
+    sample = "2026-05-10,F001,ベンレート水和剤,1000倍,0.3,L/10a,\n"
+    return StreamingResponse(
+        io.BytesIO((header + sample).encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="pesticide_records_template.csv"'},
+    )
+
+
+@router.post("/import")
+async def import_records(
+    request: Request,
+    user: CurrentUser,
+    file: UploadFile = File(...),
+):
+    """防除記録を CSV から取り込む。常に INSERT (upsert ではない)。"""
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("cp932")
+        except UnicodeDecodeError:
+            raise HTTPException(400, "CSV のデコードに失敗")
+    reader = csv.reader(io.StringIO(text))
+    try:
+        headers = next(reader)
+    except StopIteration:
+        raise HTTPException(400, "CSV が空です")
+
+    col_map: dict[str, int | None] = {
+        "date": None, "code": None, "name": None,
+        "dilution": None, "amount": None, "unit": None, "notes": None,
+    }
+    for i, h in enumerate(headers):
+        hs = (h or "").strip()
+        if hs in _DATE_ALIASES:
+            col_map["date"] = i
+        elif hs in _FIELD_CODE_ALIASES:
+            col_map["code"] = i
+        elif hs in _NAME_ALIASES:
+            col_map["name"] = i
+        elif hs in _DIL_ALIASES:
+            col_map["dilution"] = i
+        elif hs in _AMOUNT_ALIASES:
+            col_map["amount"] = i
+        elif hs in _UNIT_ALIASES:
+            col_map["unit"] = i
+        elif hs in _NOTES_ALIASES:
+            col_map["notes"] = i
+
+    for required in ("date", "code", "name"):
+        if col_map[required] is None:
+            raise HTTPException(400, f"必須ヘッダ「{required}」(散布日/ほ場ID/農薬名) が見つかりません")
+
+    added = 0
+    errors: list[str] = []
+    with connect() as conn:
+        field_map = {
+            r["field_code"]: r["id"]
+            for r in conn.execute(
+                "SELECT id, field_code FROM fields WHERE user_id = ?", (user["id"],)
+            ).fetchall()
+        }
+        for row_idx, row in enumerate(reader, start=2):
+            if not row or all((c or "").strip() == "" for c in row):
+                continue
+            def cell(key: str, default: str = "") -> str:
+                idx = col_map[key]
+                if idx is None or idx >= len(row):
+                    return default
+                return (row[idx] or "").strip()
+            code = cell("code")
+            date = cell("date")
+            name = cell("name")
+            if not (code and date and name):
+                errors.append(f"{row_idx}行目: 必須欄が空")
+                continue
+            fid = field_map.get(code)
+            if fid is None:
+                errors.append(f"{row_idx}行目: 未登録のほ場「{code}」")
+                continue
+            amount = _opt_float(cell("amount"))
+            conn.execute(
+                "INSERT INTO pesticide_records "
+                "(user_id, field_id, spray_date, pesticide_name, dilution_rate, "
+                " spray_amount, spray_unit, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (user["id"], fid, date, name, cell("dilution") or None,
+                 amount, cell("unit") or None, cell("notes") or None),
+            )
+            added += 1
+
+    summary = f"取込完了: 追加 {added}"
+    if errors:
+        summary += f" / エラー {len(errors)} 件"
+    return templates.TemplateResponse(
+        request,
+        "pesticide_records/_import_result.html",
+        {"summary": summary, "errors": errors[:20]},
     )
 
 

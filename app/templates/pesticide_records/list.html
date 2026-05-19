@@ -2,7 +2,21 @@
 {% block title %}防除記録{% endblock %}
 {% block content %}
 <h2>防除記録</h2>
-<p><a href="/pesticide-records/export.csv">CSVダウンロード</a></p>
+
+<div class="import-block">
+  <h3>CSV 取込/出力
+    <small>
+      <a href="/pesticide-records/template.csv">テンプレート</a> |
+      <a href="/pesticide-records/export.csv">エクスポート</a>
+    </small>
+  </h3>
+  <form hx-post="/pesticide-records/import" hx-encoding="multipart/form-data"
+        hx-target="#pr-import-result" hx-swap="innerHTML">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">取込</button>
+  </form>
+  <div id="pr-import-result"></div>
+</div>
 
 <table id="records-table">
   <thead>

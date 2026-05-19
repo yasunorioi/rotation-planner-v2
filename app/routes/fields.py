@@ -178,6 +178,45 @@ def download_template():
     )
 
 
+@router.get("/export.csv")
+def export_fields_csv(user: CurrentUser):
+    """ほ場 (+ 履歴) を CSV エクスポート。インポート CSV と互換。"""
+    with connect() as conn:
+        fields = conn.execute(
+            "SELECT id, field_code, district, name, area_ha, beet_forbidden, notes "
+            "FROM fields WHERE user_id = ? ORDER BY field_code",
+            (user["id"],),
+        ).fetchall()
+        rows = conn.execute(
+            "SELECT h.field_id, h.year, h.crop FROM crop_history h "
+            "JOIN fields f ON h.field_id = f.id WHERE f.user_id = ?",
+            (user["id"],),
+        ).fetchall()
+    history: dict[int, dict[str, str]] = {}
+    year_set: set[str] = set()
+    for r in rows:
+        history.setdefault(r["field_id"], {})[r["year"]] = r["crop"]
+        year_set.add(r["year"])
+    years = sorted(year_set, key=lambda y: int(y[1:]) if y.startswith("R") and y[1:].isdigit() else 0)
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ほ場ID", "地区", "ほ場名", "area", "beet_forbidden", "備考"] + years)
+    for f in fields:
+        w.writerow([
+            f["field_code"], f["district"] or "", f["name"] or "",
+            f"{f['area_ha'] * 100:.1f}",  # ha → a
+            "1" if f["beet_forbidden"] else "0",
+            f["notes"] or "",
+        ] + [history.get(f["id"], {}).get(y, "") for y in years])
+    buf.seek(0)
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="fields.csv"'},
+    )
+
+
 def _match_alias(name: str, aliases: set[str]) -> bool:
     return name.strip() in aliases
 

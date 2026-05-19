@@ -672,6 +672,91 @@ def test_pesticide_record_rejects_other_user_field(app_client):
     assert r.status_code == 400
 
 
+def test_fields_export_csv(app_client):
+    # CSV インポートで投入
+    csv_in = (
+        "ほ場ID,地区,ほ場名,area,beet_forbidden,R6,R7\n"
+        "EX1,地区A,名称A,250,0,大豆,てんさい\n"
+        "EX2,地区B,名称B,180,1,てんさい,小麦(秋播)\n"
+    )
+    app_client.post("/fields/import", files={"file": ("in.csv", csv_in.encode("utf-8-sig"), "text/csv")})
+    r = app_client.get("/fields/export.csv")
+    assert r.status_code == 200
+    text = r.content.decode("utf-8-sig")
+    # ヘッダ
+    assert "ほ場ID,地区,ほ場名,area,beet_forbidden,備考,R6,R7" in text
+    # 値 (250a → 2.50ha → 戻すと250.0a)
+    assert "EX1,地区A,名称A,250.0,0," in text
+    assert "EX2,地区B,名称B,180.0,1," in text
+    # 履歴
+    assert "大豆,てんさい" in text
+
+
+def test_history_template_and_import(app_client):
+    # テンプレ
+    r = app_client.get("/history/template.csv")
+    assert r.status_code == 200
+    text = r.content.decode("utf-8-sig")
+    assert "ほ場ID" in text and "R" in text  # 何らかの令和年が入る
+
+    # 既存ほ場
+    _make_field(app_client, "H1")
+    _make_field(app_client, "H2")
+    csv_in = (
+        "ほ場ID,R6,R7\n"
+        "H1,大豆,てんさい\n"
+        "H2,てんさい,\n"  # H2 R7 は空文字 → 既存があれば削除、なければ無視
+        "NOPE,何か,別の\n"  # 未登録 → エラー
+    )
+    r = app_client.post(
+        "/history/import",
+        files={"file": ("h.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 200
+    assert "upsert 3" in r.text
+    assert "エラー 1" in r.text
+    # 確認
+    r = app_client.get("/history/?from=R6&to=R7")
+    assert "大豆" in r.text and "てんさい" in r.text
+
+
+def test_pesticide_template_and_import(app_client):
+    # テンプレ
+    r = app_client.get("/pesticide-records/template.csv")
+    assert r.status_code == 200
+    text = r.content.decode("utf-8-sig")
+    assert "散布日" in text and "ほ場ID" in text and "農薬名" in text
+
+    # 既存ほ場
+    _make_field(app_client, "P1")
+    csv_in = (
+        "散布日,ほ場ID,農薬名,希釈倍率,量,単位,備考\n"
+        "2026-05-10,P1,薬A,1000倍,0.3,L/10a,テスト1\n"
+        "2026-05-11,P1,薬B,2000倍,0.5,L/10a,\n"
+        "2026-05-12,NOPE,薬C,,,,\n"  # 未登録
+        ",P1,薬D,,,,\n"  # 必須欠落
+    )
+    r = app_client.post(
+        "/pesticide-records/import",
+        files={"file": ("p.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 200
+    assert "追加 2" in r.text
+    assert "エラー 2" in r.text
+    r = app_client.get("/pesticide-records/")
+    assert "薬A" in r.text and "薬B" in r.text
+    assert "薬C" not in r.text
+
+
+def test_pesticide_import_rejects_missing_columns(app_client):
+    csv_in = "ほ場ID\nP1\n"
+    r = app_client.post(
+        "/pesticide-records/import",
+        files={"file": ("bad.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 400
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る
