@@ -28,6 +28,38 @@
   </tbody>
 </table>
 
+{% if result.crops_in_result %}
+<h3 class="summary-title">年別 × 作物別 合計面積 (ha)</h3>
+<table class="rotation-summary">
+  <thead>
+    <tr>
+      <th>年</th>
+      {% for crop in result.crops_in_result %}<th>{{ crop }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for y in result.past_years %}
+    <tr class="past-row">
+      <th>{{ y }}</th>
+      {% for crop in result.crops_in_result %}
+        {% set v = result.summary[y].get(crop, 0) %}
+        <td>{{ "%.2f"|format(v) if v else "" }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    {% for y in result.future_years %}
+    <tr class="future-row">
+      <th>{{ y }}</th>
+      {% for crop in result.crops_in_result %}
+        {% set v = result.summary[y].get(crop, 0) %}
+        <td>{{ "%.2f"|format(v) if v else "" }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 {% if result.errors %}
 <details class="warnings">
   <summary>⚠️ 警告/違反 {{ result.errors|length }}件</summary>

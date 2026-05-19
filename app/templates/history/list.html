@@ -10,6 +10,7 @@
     <input type="text" name="to" value="{{ to_y }}" size="4" placeholder="R10">
   </label>
   <button type="submit">表示</button>
+  <a href="/history/export.csv?from={{ from_y }}&to={{ to_y }}" class="csv-link">CSVダウンロード</a>
 </form>
 
 {% if not fields %}

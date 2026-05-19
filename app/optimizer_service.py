@@ -123,6 +123,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
 
     opt_fields = []
     field_codes = []
+    area_by_code: dict[str, float] = {}
     for f in field_rows:
         history = history_map.get(f["id"], {})
         opt_fields.append(
@@ -136,6 +137,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
             )
         )
         field_codes.append(f["field_code"])
+        area_by_code[f["field_code"]] = float(f["area_ha"])
 
     constraints_dict = load_constraints_dict(plan)
     crops = list(constraints_dict.keys())
@@ -159,6 +161,21 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
     for y in future_years:
         is_past[y] = False
 
+    # 年×作物の合計面積サマリ。結果に登場する作物のみ列挙する
+    all_years = past_years + future_years
+    crops_in_result: list[str] = []
+    seen_crops: set[str] = set()
+    summary: dict[str, dict[str, float]] = {y: {} for y in all_years}
+    for code in field_codes:
+        for y in all_years:
+            crop = grid.get((code, y))
+            if not crop:
+                continue
+            if crop not in seen_crops:
+                seen_crops.add(crop)
+                crops_in_result.append(crop)
+            summary[y][crop] = summary[y].get(crop, 0.0) + area_by_code[code]
+
     return {
         "ok": True,
         "message": f"スコア {score:.1f} / 過去{len(past_years)}年 + 将来{len(future_years)}年",
@@ -169,4 +186,6 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
         "is_past": is_past,
         "score": score,
         "errors": errors or [],
+        "summary": summary,
+        "crops_in_result": crops_in_result,
     }

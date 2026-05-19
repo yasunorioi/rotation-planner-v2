@@ -2,10 +2,12 @@
 
 `crop_history` テーブルは (field_id, year) UNIQUE。crop が空文字列なら行を消す。
 """
+import csv
+import io
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import CurrentUser
@@ -75,6 +77,43 @@ def _read_cell(conn, field_id: int, year: str) -> str:
         (field_id, year),
     ).fetchone()
     return row["crop"] if row else ""
+
+
+@router.get("/export.csv")
+def export_history_csv(
+    user: CurrentUser,
+    from_y: str | None = Query(None, alias="from"),
+    to_y: str | None = Query(None, alias="to"),
+):
+    """履歴ピボットを CSV 出力 (BOM 付き UTF-8)。"""
+    years = _year_range(from_y, to_y)
+    with connect() as conn:
+        fields = conn.execute(
+            "SELECT id, field_code, name FROM fields WHERE user_id = ? ORDER BY field_code",
+            (user["id"],),
+        ).fetchall()
+        rows = conn.execute(
+            "SELECT h.field_id, h.year, h.crop FROM crop_history h "
+            "JOIN fields f ON h.field_id = f.id WHERE f.user_id = ?",
+            (user["id"],),
+        ).fetchall()
+    grid = {(r["field_id"], r["year"]): r["crop"] for r in rows}
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ほ場ID", "ほ場名"] + years)
+    for f in fields:
+        w.writerow(
+            [f["field_code"], f["name"] or ""]
+            + [grid.get((f["id"], y), "") for y in years]
+        )
+    buf.seek(0)
+    fname = f'crop_history_{years[0]}-{years[-1]}.csv'
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.get("/cell", response_class=HTMLResponse)

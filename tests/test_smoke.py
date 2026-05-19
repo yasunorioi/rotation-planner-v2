@@ -543,6 +543,38 @@ def test_csv_import_rejects_missing_required_columns(app_client):
     assert r.status_code == 400
 
 
+def test_result_summary_table(app_client):
+    # ほ場 3つで計画 → サマリ表が出る
+    for code in ["S1", "S2", "S3"]:
+        app_client.post("/fields/", data={"field_code": code, "name": code, "area_ha": "2.0"})
+    r = app_client.post("/plans/", data={"name": "S計画", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.post(f"/plans/{pid}/optimize")
+    assert r.status_code == 200
+    assert "年別 × 作物別 合計面積" in r.text
+    # 3ほ場 × 2.0ha = 6.00ha の合計が将来年のどこかに出る
+    assert "6.00" in r.text or "4.00" in r.text or "2.00" in r.text  # 分散される可能性
+
+
+def test_history_csv_export(app_client):
+    # ほ場 + 履歴を CSV インポートで投入
+    csv_in = "ほ場ID,area,R6,R7\nE1,200,大豆,てんさい\nE2,150,てんさい,小麦(秋播)\n"
+    app_client.post(
+        "/fields/import",
+        files={"file": ("h.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    # エクスポート
+    r = app_client.get("/history/export.csv?from=R6&to=R7")
+    assert r.status_code == 200
+    body = r.content
+    assert body.startswith(b"\xef\xbb\xbf")
+    text = body.decode("utf-8-sig")
+    assert "ほ場ID,ほ場名,R6,R7" in text
+    assert "E1,," in text and "大豆,てんさい" in text
+    assert "E2,," in text and "てんさい,小麦(秋播)" in text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る
