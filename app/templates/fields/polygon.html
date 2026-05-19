@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}ポリゴン編集 — {{ field.field_code }}{% endblock %}
+{% block content %}
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="" />
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+<h2>ポリゴン編集 — {{ field.field_code }} {{ field.name or "" }}</h2>
+
+<form id="polygon-form" method="post" action="/fields/{{ field.id }}/polygon">
+  <input type="hidden" name="geojson" id="geojson-input">
+  <div class="polygon-toolbar">
+    <button type="submit">保存</button>
+    <button type="button" id="clear-btn">クリア</button>
+    <a href="/fields/" class="cancel-link">戻る</a>
+  </div>
+</form>
+
+<div id="map" class="field-map"></div>
+
+<script id="field-map-data" type="application/json">{{ map_data|tojson }}</script>
+<script src="/static/js/field_map.js"></script>
+{% endblock %}

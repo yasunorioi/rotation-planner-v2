@@ -8,6 +8,7 @@
   <td>
     <button hx-get="/fields/{{ field.id }}/edit"
             hx-target="#field-form-slot" hx-swap="innerHTML">編集</button>
+    <a href="/fields/{{ field.id }}/polygon" class="row-link">地図</a>
     <button hx-delete="/fields/{{ field.id }}"
             hx-target="#field-{{ field.id }}" hx-swap="outerHTML"
             hx-confirm="削除しますか？">削除</button>

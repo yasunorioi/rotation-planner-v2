@@ -1,12 +1,15 @@
-"""ほ場 CRUD — HTMX で行単位 add/edit/delete。"""
+"""ほ場 CRUD — HTMX で行単位 add/edit/delete。ポリゴン編集は別ページ。"""
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.auth import CurrentUser
 from app.db import connect
+
+SAPPORO = [43.0642, 141.3469]  # ポリゴン未登録時のデフォルト中心
 
 router = APIRouter(prefix="/fields")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -117,3 +120,60 @@ def delete_field(user: CurrentUser, field_id: int):
         if result.rowcount == 0:
             raise HTTPException(404, "ほ場が見つかりません")
     return Response(status_code=200)
+
+
+@router.get("/{field_id}/polygon")
+def polygon_editor(request: Request, user: CurrentUser, field_id: int):
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id, field_code, name, coordinates_json FROM fields "
+            "WHERE id = ? AND user_id = ?",
+            (field_id, user["id"]),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, "ほ場が見つかりません")
+
+    existing = None
+    if row["coordinates_json"]:
+        try:
+            existing = json.loads(row["coordinates_json"])
+        except json.JSONDecodeError:
+            existing = None
+    return templates.TemplateResponse(
+        request,
+        "fields/polygon.html",
+        {
+            "user": user,
+            "field": dict(row),
+            "map_data": {
+                "center": SAPPORO,
+                "zoom": 10,
+                "geojson": existing,
+            },
+        },
+    )
+
+
+@router.post("/{field_id}/polygon")
+def save_polygon(user: CurrentUser, field_id: int, geojson: str = Form("")):
+    geojson = geojson.strip()
+    if geojson:
+        try:
+            parsed = json.loads(geojson)
+        except json.JSONDecodeError:
+            raise HTTPException(400, "GeoJSON のパースに失敗")
+        geom_type = parsed.get("geometry", {}).get("type") if parsed.get("type") == "Feature" else parsed.get("type")
+        if geom_type != "Polygon":
+            raise HTTPException(400, f"Polygon 以外は受け付けません (type={geom_type})")
+        value = json.dumps(parsed, ensure_ascii=False)
+    else:
+        value = None
+    with connect() as conn:
+        result = conn.execute(
+            "UPDATE fields SET coordinates_json=?, updated_at=CURRENT_TIMESTAMP "
+            "WHERE id=? AND user_id=?",
+            (value, field_id, user["id"]),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "ほ場が見つかりません")
+    return RedirectResponse("/fields/", status_code=303)

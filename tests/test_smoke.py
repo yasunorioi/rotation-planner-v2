@@ -58,3 +58,77 @@ def test_fields_empty_then_create_edit_delete(app_client):
 def test_invalid_password(app_client):
     app_client.auth = ("test", "wrong")
     assert app_client.get("/").status_code == 401
+
+
+def _create_field(client) -> int:
+    import re
+    r = client.post("/fields/", data={"field_code": "P001", "name": "テスト圃", "area_ha": "1.0"})
+    return int(re.search(r'id="field-(\d+)"', r.text).group(1))
+
+
+def test_polygon_editor_page(app_client):
+    fid = _create_field(app_client)
+    r = app_client.get(f"/fields/{fid}/polygon")
+    assert r.status_code == 200
+    assert "ポリゴン編集" in r.text
+    assert "field-map-data" in r.text
+    # 初期 GeoJSON は null
+    assert '"geojson": null' in r.text or '"geojson":null' in r.text
+
+
+def test_polygon_save_and_clear(app_client):
+    fid = _create_field(app_client)
+    polygon_feature = {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[141.3, 43.0], [141.4, 43.0], [141.4, 43.1], [141.3, 43.1], [141.3, 43.0]]],
+        },
+    }
+    import json
+    r = app_client.post(
+        f"/fields/{fid}/polygon",
+        data={"geojson": json.dumps(polygon_feature)},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    # 再読込でロードできる
+    r = app_client.get(f"/fields/{fid}/polygon")
+    assert "Polygon" in r.text and "141.3" in r.text
+    # クリア（空文字列 POST）
+    r = app_client.post(f"/fields/{fid}/polygon", data={"geojson": ""}, follow_redirects=False)
+    assert r.status_code == 303
+    r = app_client.get(f"/fields/{fid}/polygon")
+    assert '"geojson": null' in r.text or '"geojson":null' in r.text
+
+
+def test_polygon_rejects_non_polygon(app_client):
+    fid = _create_field(app_client)
+    point = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.3, 43.0]}}
+    import json
+    r = app_client.post(f"/fields/{fid}/polygon", data={"geojson": json.dumps(point)})
+    assert r.status_code == 400
+
+
+def test_polygon_rejects_malformed_json(app_client):
+    fid = _create_field(app_client)
+    r = app_client.post(f"/fields/{fid}/polygon", data={"geojson": "{not json"})
+    assert r.status_code == 400
+
+
+def test_polygon_404_for_other_user_field(app_client):
+    fid = _create_field(app_client)
+    # 別ユーザー作る
+    import hashlib, sqlite3, os
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    assert app_client.get(f"/fields/{fid}/polygon").status_code == 404
