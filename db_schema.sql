@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS fields (
     beet_forbidden INTEGER DEFAULT 0,
     land_category TEXT DEFAULT NULL,
     coordinates_json TEXT,
+    fixed_crop TEXT,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

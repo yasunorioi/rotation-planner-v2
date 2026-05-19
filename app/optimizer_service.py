@@ -96,7 +96,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
 
     with connect() as conn:
         field_rows = conn.execute(
-            "SELECT id, field_code, name, district, area_ha, beet_forbidden "
+            "SELECT id, field_code, name, district, area_ha, beet_forbidden, fixed_crop "
             "FROM fields WHERE user_id = ? ORDER BY field_code",
             (user_id,),
         ).fetchall()
@@ -124,6 +124,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
     opt_fields = []
     field_codes = []
     area_by_code: dict[str, float] = {}
+    fixed_by_code: dict[str, str] = {}
     for f in field_rows:
         history = history_map.get(f["id"], {})
         opt_fields.append(
@@ -138,6 +139,8 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
         )
         field_codes.append(f["field_code"])
         area_by_code[f["field_code"]] = float(f["area_ha"])
+        if f["fixed_crop"]:
+            fixed_by_code[f["field_code"]] = f["fixed_crop"]
 
     constraints_dict = load_constraints_dict(plan)
     crops = list(constraints_dict.keys())
@@ -146,16 +149,21 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
     planner = RotationPlannerORTools(opt_fields, past_years, future_years, crops, constraints)
     plan_dict, score, errors = planner.solve(timeout_seconds=timeout_seconds, district_grouping=False)
 
-    # grid: 履歴 + 計画結果
+    # grid: 履歴 + 計画結果 (+ 固定作物オーバーライド)
     grid: dict[tuple[str, str], str] = {}
     for idx, f in enumerate(opt_fields):
+        fixed = fixed_by_code.get(f.field_id)
         for y in past_years:
             if y in f.history:
                 grid[(f.field_id, y)] = f.history[y]
         for y in future_years:
-            crop = plan_dict.get((idx, y)) if plan_dict else None
-            if crop:
-                grid[(f.field_id, y)] = crop
+            if fixed:
+                # 固定作物 ほ場は optimizer 結果を上書き
+                grid[(f.field_id, y)] = fixed
+            else:
+                crop = plan_dict.get((idx, y)) if plan_dict else None
+                if crop:
+                    grid[(f.field_id, y)] = crop
 
     is_past = {y: True for y in past_years}
     for y in future_years:
@@ -176,9 +184,13 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
                 crops_in_result.append(crop)
             summary[y][crop] = summary[y].get(crop, 0.0) + area_by_code[code]
 
+    msg = f"スコア {score:.1f} / 過去{len(past_years)}年 + 将来{len(future_years)}年"
+    if fixed_by_code:
+        msg += f" / 固定作物ほ場 {len(fixed_by_code)} 件"
+
     return {
         "ok": True,
-        "message": f"スコア {score:.1f} / 過去{len(past_years)}年 + 将来{len(future_years)}年",
+        "message": msg,
         "field_codes": field_codes,
         "past_years": past_years,
         "future_years": future_years,

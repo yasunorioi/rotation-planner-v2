@@ -19,7 +19,25 @@ def configure_db() -> Path:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     _domain_db.DB_PATH = db_path
     _domain_db_access.DB_PATH = db_path
+    _migrate(db_path)
     return db_path
+
+
+def _migrate(db_path: Path) -> None:
+    """既存 DB に対する手動マイグレーション。
+    Why: SQLite は ADD COLUMN IF NOT EXISTS を持たないため、
+    db_schema.sql に列追加した時は PRAGMA で確認して個別に ALTER する。
+    """
+    if not db_path.exists():
+        return  # 新規 DB はスキーマがそのまま反映される
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fields)")}
+        if cols and "fixed_crop" not in cols:
+            conn.execute("ALTER TABLE fields ADD COLUMN fixed_crop TEXT")
+            conn.commit()
+    finally:
+        conn.close()
 
 
 @contextmanager

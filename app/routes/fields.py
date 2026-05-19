@@ -22,6 +22,7 @@ _NAME_ALIASES = {"ほ場名", "圃場名", "name"}
 _AREA_HA_ALIASES = {"area_ha", "面積_ha", "area(ha)"}
 _AREA_A_ALIASES = {"area", "area_a", "面積_a", "面積(a)", "面積"}  # アール
 _BEET_ALIASES = {"beet_forbidden", "てんさい禁忌"}
+_FIXED_CROP_ALIASES = {"fixed_crop", "固定作物"}
 _NOTES_ALIASES = {"notes", "備考", "メモ"}
 _YEAR_PATTERN = re.compile(r"^R\d+$")
 
@@ -30,9 +31,41 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent
 
 
 _FIELD_COLS = (
-    "id, field_code, district, name, area_ha, beet_forbidden, notes, "
+    "id, field_code, district, name, area_ha, beet_forbidden, fixed_crop, notes, "
     "(coordinates_json IS NOT NULL) AS has_polygon"
 )
+
+
+def _crop_suggestions(user_id: int) -> list[str]:
+    """fields の form で使う作物候補。history と同じ集合。"""
+    from rotation_planner.app import DEFAULT_CONSTRAINTS
+    import json as _json
+
+    seen: dict[str, None] = {}
+    for c in DEFAULT_CONSTRAINTS.keys():
+        seen.setdefault(c, None)
+    with connect() as conn:
+        for r in conn.execute(
+            "SELECT DISTINCT h.crop FROM crop_history h "
+            "JOIN fields f ON h.field_id = f.id "
+            "WHERE f.user_id = ? AND h.crop IS NOT NULL AND h.crop != ''",
+            (user_id,),
+        ):
+            if r["crop"]:
+                seen.setdefault(r["crop"], None)
+        for r in conn.execute(
+            "SELECT constraints_json FROM rotation_plans "
+            "WHERE user_id = ? AND constraints_json IS NOT NULL",
+            (user_id,),
+        ):
+            try:
+                obj = _json.loads(r["constraints_json"])
+                if isinstance(obj, dict):
+                    for c in obj.keys():
+                        seen.setdefault(c, None)
+            except (TypeError, _json.JSONDecodeError):
+                pass
+    return list(seen.keys())
 
 
 def _build_field_filter(district: str | None, polygon: str | None) -> tuple[str, list]:
@@ -109,7 +142,8 @@ def list_fields(
 @router.get("/new", response_class=HTMLResponse)
 def new_field_form(request: Request, user: CurrentUser):
     return templates.TemplateResponse(
-        request, "fields/_form.html", {"field": None}
+        request, "fields/_form.html",
+        {"field": None, "crops": _crop_suggestions(user["id"])},
     )
 
 
@@ -122,13 +156,15 @@ def create_field(
     district: str = Form(""),
     area_ha: float = Form(...),
     beet_forbidden: bool = Form(False),
+    fixed_crop: str = Form(""),
     notes: str = Form(""),
 ):
     with connect() as conn:
         cursor = conn.execute(
-            "INSERT INTO fields (user_id, field_code, district, name, area_ha, beet_forbidden, notes) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user["id"], field_code, district or None, name or None, area_ha, int(beet_forbidden), notes or None),
+            "INSERT INTO fields (user_id, field_code, district, name, area_ha, beet_forbidden, fixed_crop, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], field_code, district or None, name or None, area_ha,
+             int(beet_forbidden), fixed_crop.strip() or None, notes or None),
         )
         field_id = cursor.lastrowid
     field = _fetch_field(user["id"], field_id)
@@ -138,7 +174,10 @@ def create_field(
 @router.get("/{field_id}/edit", response_class=HTMLResponse)
 def edit_field_form(request: Request, user: CurrentUser, field_id: int):
     field = _fetch_field(user["id"], field_id)
-    return templates.TemplateResponse(request, "fields/_form.html", {"field": field})
+    return templates.TemplateResponse(
+        request, "fields/_form.html",
+        {"field": field, "crops": _crop_suggestions(user["id"])},
+    )
 
 
 @router.put("/{field_id}", response_class=HTMLResponse)
@@ -151,13 +190,15 @@ def update_field(
     district: str = Form(""),
     area_ha: float = Form(...),
     beet_forbidden: bool = Form(False),
+    fixed_crop: str = Form(""),
     notes: str = Form(""),
 ):
     with connect() as conn:
         result = conn.execute(
-            "UPDATE fields SET field_code=?, district=?, name=?, area_ha=?, beet_forbidden=?, notes=?, "
-            "updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
-            (field_code, district or None, name or None, area_ha, int(beet_forbidden), notes or None,
+            "UPDATE fields SET field_code=?, district=?, name=?, area_ha=?, beet_forbidden=?, "
+            "fixed_crop=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
+            (field_code, district or None, name or None, area_ha, int(beet_forbidden),
+             fixed_crop.strip() or None, notes or None,
              field_id, user["id"]),
         )
         if result.rowcount == 0:
@@ -231,9 +272,9 @@ def polygon_editor(request: Request, user: CurrentUser, field_id: int):
 
 @router.get("/template.csv")
 def download_template():
-    """v1 互換の CSV テンプレートを返す。"""
-    header = "ほ場ID,地区,ほ場名,area,beet_forbidden,R5,R6,R7,R8\n"
-    sample = "F001,北地区,北1号,280,0,春小麦,大豆,秋小麦,てんさい\n"
+    """v1 互換 + fixed_crop 拡張の CSV テンプレートを返す。"""
+    header = "ほ場ID,地区,ほ場名,area,beet_forbidden,固定作物,R5,R6,R7,R8\n"
+    sample = "F001,北地区,北1号,280,0,,春小麦,大豆,秋小麦,てんさい\n"
     body = (header + sample).encode("utf-8-sig")
     return StreamingResponse(
         io.BytesIO(body),
@@ -459,7 +500,7 @@ def export_fields_csv(
     where_sql, params = _build_field_filter(district, polygon)
     with connect() as conn:
         fields = conn.execute(
-            f"SELECT id, field_code, district, name, area_ha, beet_forbidden, notes "
+            f"SELECT id, field_code, district, name, area_ha, beet_forbidden, fixed_crop, notes "
             f"FROM fields WHERE {where_sql} ORDER BY field_code",
             ([user["id"]] + params),
         ).fetchall()
@@ -477,12 +518,13 @@ def export_fields_csv(
 
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["ほ場ID", "地区", "ほ場名", "area", "beet_forbidden", "備考"] + years)
+    w.writerow(["ほ場ID", "地区", "ほ場名", "area", "beet_forbidden", "固定作物", "備考"] + years)
     for f in fields:
         w.writerow([
             f["field_code"], f["district"] or "", f["name"] or "",
             f"{f['area_ha'] * 100:.1f}",  # ha → a
             "1" if f["beet_forbidden"] else "0",
+            f["fixed_crop"] or "",
             f["notes"] or "",
         ] + [history.get(f["id"], {}).get(y, "") for y in years])
     buf.seek(0)
@@ -506,6 +548,7 @@ def _classify_columns(headers: list[str]) -> dict:
         "area_ha": None,
         "area_a": None,
         "beet_forbidden": None,
+        "fixed_crop": None,
         "notes": None,
         "years": [],  # list of (col_index, year_str)
     }
@@ -523,6 +566,8 @@ def _classify_columns(headers: list[str]) -> dict:
             mapping["area_a"] = i
         elif _match_alias(hs, _BEET_ALIASES):
             mapping["beet_forbidden"] = i
+        elif _match_alias(hs, _FIXED_CROP_ALIASES):
+            mapping["fixed_crop"] = i
         elif _match_alias(hs, _NOTES_ALIASES):
             mapping["notes"] = i
         elif _YEAR_PATTERN.match(hs):
@@ -583,6 +628,9 @@ async def import_csv(
                     raw_b = row[cols["beet_forbidden"]].strip().lower()
                     beet = 1 if raw_b in ("1", "true", "yes", "禁") else 0
                 notes = row[cols["notes"]].strip() if cols["notes"] is not None and cols["notes"] < len(row) else None
+                fixed_crop = None
+                if cols["fixed_crop"] is not None and cols["fixed_crop"] < len(row):
+                    fixed_crop = (row[cols["fixed_crop"]].strip() or None)
             except (ValueError, IndexError) as e:
                 errors.append(f"{row_idx}行目: {e}")
                 continue
@@ -595,17 +643,19 @@ async def import_csv(
             if existing:
                 conn.execute(
                     "UPDATE fields SET district=?, name=?, area_ha=?, beet_forbidden=?, "
-                    "notes=COALESCE(?, notes), updated_at=CURRENT_TIMESTAMP "
-                    "WHERE id=?",
-                    (district or None, name or None, area_ha, beet, notes or None, existing["id"]),
+                    "fixed_crop=COALESCE(?, fixed_crop), notes=COALESCE(?, notes), "
+                    "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (district or None, name or None, area_ha, beet,
+                     fixed_crop, notes or None, existing["id"]),
                 )
                 field_db_id = existing["id"]
                 updated += 1
             else:
                 cur = conn.execute(
-                    "INSERT INTO fields (user_id, field_code, district, name, area_ha, beet_forbidden, notes) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (user["id"], code, district or None, name or None, area_ha, beet, notes or None),
+                    "INSERT INTO fields (user_id, field_code, district, name, area_ha, "
+                    "beet_forbidden, fixed_crop, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (user["id"], code, district or None, name or None, area_ha,
+                     beet, fixed_crop, notes or None),
                 )
                 field_db_id = cur.lastrowid
                 added += 1

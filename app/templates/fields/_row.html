@@ -5,6 +5,7 @@
   <td>{{ "%.2f"|format(field.area_ha) }}</td>
   <td>{{ "✓" if field.beet_forbidden else "" }}</td>
   <td>{{ "✓" if field.has_polygon else "" }}</td>
+  <td class="fixed-crop">{{ field.fixed_crop or "" }}</td>
   <td>{{ field.notes or "" }}</td>
   <td>
     <button hx-get="/fields/{{ field.id }}/edit"

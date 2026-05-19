@@ -683,11 +683,11 @@ def test_fields_export_csv(app_client):
     r = app_client.get("/fields/export.csv")
     assert r.status_code == 200
     text = r.content.decode("utf-8-sig")
-    # ヘッダ
-    assert "ほ場ID,地区,ほ場名,area,beet_forbidden,備考,R6,R7" in text
-    # 値 (250a → 2.50ha → 戻すと250.0a)
-    assert "EX1,地区A,名称A,250.0,0," in text
-    assert "EX2,地区B,名称B,180.0,1," in text
+    # ヘッダ (固定作物列を含む)
+    assert "ほ場ID,地区,ほ場名,area,beet_forbidden,固定作物,備考,R6,R7" in text
+    # 値 (250a → 2.50ha → 戻すと250.0a, fixed_crop と備考は空)
+    assert "EX1,地区A,名称A,250.0,0,,," in text
+    assert "EX2,地区B,名称B,180.0,1,,," in text
     # 履歴
     assert "大豆,てんさい" in text
 
@@ -1174,6 +1174,77 @@ def test_history_cell_datalist_includes_plan_constraints(app_client):
     # 履歴セル編集 → そば が候補に出る
     r = app_client.get(f"/history/cell/edit?field_id={fid}&year=R7")
     assert '<option value="そば"></option>' in r.text
+
+
+def test_field_fixed_crop_crud(app_client):
+    # 新規作成 with fixed_crop
+    r = app_client.post("/fields/", data={
+        "field_code": "FC1", "name": "牧草地", "area_ha": "1.5",
+        "fixed_crop": "牧草",
+    })
+    assert r.status_code == 200
+    assert "牧草" in r.text  # 行表示に出る
+    import re
+    fid = int(re.search(r'id="field-(\d+)"', r.text).group(1))
+
+    # 編集フォームに値が入る
+    r = app_client.get(f"/fields/{fid}/edit")
+    assert 'value="牧草"' in r.text
+
+    # 更新で空にする
+    r = app_client.put(f"/fields/{fid}", data={
+        "field_code": "FC1", "name": "牧草地", "area_ha": "1.5",
+        "fixed_crop": "",
+    })
+    r = app_client.get("/fields/")
+    row = re.search(rf'id="field-{fid}".+?</tr>', r.text, re.DOTALL).group(0)
+    # fixed-crop セルが空になっている
+    assert '<td class="fixed-crop"></td>' in row
+
+
+def test_field_fixed_crop_csv_roundtrip(app_client):
+    csv_in = (
+        "ほ場ID,area,固定作物,R6\n"
+        "PERM1,200,牧草,\n"
+        "PERM2,300,,だいず\n"
+    )
+    r = app_client.post(
+        "/fields/import",
+        files={"file": ("f.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 200
+    assert "追加 2" in r.text
+    r = app_client.get("/fields/")
+    # PERM1 の行に「牧草」が表示
+    import re
+    row = re.search(r'id="field-\d+".+?PERM1.+?</tr>', r.text, re.DOTALL).group(0)
+    assert "牧草" in row
+    # エクスポート
+    r = app_client.get("/fields/export.csv")
+    text = r.content.decode("utf-8-sig")
+    assert "固定作物" in text
+    assert "PERM1,," in text and "牧草" in text
+
+
+def test_optimizer_overrides_with_fixed_crop(app_client):
+    # 固定作物ほ場と通常ほ場
+    app_client.post("/fields/", data={
+        "field_code": "FIX1", "name": "永久畑", "area_ha": "2.0", "fixed_crop": "牧草",
+    })
+    app_client.post("/fields/", data={
+        "field_code": "ROT1", "name": "ローテ", "area_ha": "2.0",
+    })
+    r = app_client.post("/plans/", data={"name": "FT", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.post(f"/plans/{pid}/optimize")
+    assert r.status_code == 200
+    # 固定作物ほ場 1 件 とメッセージに出る
+    assert "固定作物ほ場 1 件" in r.text
+    # FIX1 の R8/R9 セルは「牧草」
+    # ピボット表の FIX1 行を確認
+    row = re.search(r'class="field-label">FIX1</th>.+?</tr>', r.text, re.DOTALL).group(0)
+    assert row.count("牧草") >= 2  # R8 + R9
 
 
 def test_polygon_404_for_other_user_field(app_client):

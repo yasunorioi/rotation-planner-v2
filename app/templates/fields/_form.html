@@ -12,6 +12,13 @@
   <label>名称 <input name="name" value="{{ field.name if field and field.name else '' }}"></label>
   <label>面積(ha) <input name="area_ha" type="number" step="0.01" required value="{{ field.area_ha if field else '' }}"></label>
   <label><input name="beet_forbidden" type="checkbox" {% if field and field.beet_forbidden %}checked{% endif %}> てんさい禁忌</label>
+  <label>固定作物
+    <input name="fixed_crop" list="field-crops" placeholder="(任意)"
+           value="{{ field.fixed_crop if field and field.fixed_crop else '' }}">
+    <datalist id="field-crops">
+      {% for c in crops %}<option value="{{ c }}"></option>{% endfor %}
+    </datalist>
+  </label>
   <label>備考 <input name="notes" value="{{ field.notes if field and field.notes else '' }}"></label>
   <button type="submit">{{ "更新" if field else "追加" }}</button>
   <button type="button"
