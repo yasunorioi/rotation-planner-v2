@@ -575,6 +575,103 @@ def test_history_csv_export(app_client):
     assert "E2,," in text and "てんさい,小麦(秋播)" in text
 
 
+def _make_field(client, code="X1"):
+    import re
+    r = client.post("/fields/", data={"field_code": code, "name": code, "area_ha": "1.0"})
+    return int(re.search(r'id="field-(\d+)"', r.text).group(1))
+
+
+def test_pesticide_records_empty(app_client):
+    r = app_client.get("/pesticide-records/")
+    assert r.status_code == 200
+    assert "防除記録" in r.text
+    # ほ場0件のときは追加ボタンの代わりに案内
+    assert "先に" in r.text and "ほ場" in r.text
+
+
+def test_pesticide_records_crud(app_client):
+    fid = _make_field(app_client, "X1")
+    # 新規
+    r = app_client.post(
+        "/pesticide-records/",
+        data={
+            "field_id": fid, "spray_date": "2026-05-10",
+            "pesticide_name": "ベンレート", "dilution_rate": "1000倍",
+            "spray_amount": "0.3", "spray_unit": "L/10a", "notes": "テスト",
+        },
+    )
+    assert r.status_code == 200
+    assert "ベンレート" in r.text
+    assert "2026-05-10" in r.text
+    import re
+    rec_id = int(re.search(r'id="record-(\d+)"', r.text).group(1))
+
+    # 一覧
+    r = app_client.get("/pesticide-records/")
+    assert "ベンレート" in r.text
+
+    # 編集
+    r = app_client.put(
+        f"/pesticide-records/{rec_id}",
+        data={
+            "field_id": fid, "spray_date": "2026-05-11",
+            "pesticide_name": "ベンレート(改)", "dilution_rate": "2000倍",
+            "spray_amount": "0.5", "spray_unit": "L/10a", "notes": "",
+        },
+    )
+    assert r.status_code == 200
+    assert "ベンレート(改)" in r.text and "2026-05-11" in r.text
+
+    # 削除
+    assert app_client.delete(f"/pesticide-records/{rec_id}").status_code == 200
+    r = app_client.get("/pesticide-records/")
+    assert "ベンレート" not in r.text
+
+
+def test_pesticide_records_csv_export(app_client):
+    fid = _make_field(app_client, "X2")
+    app_client.post(
+        "/pesticide-records/",
+        data={
+            "field_id": fid, "spray_date": "2026-05-12",
+            "pesticide_name": "テストP", "dilution_rate": "",
+            "spray_amount": "", "spray_unit": "", "notes": "",
+        },
+    )
+    r = app_client.get("/pesticide-records/export.csv")
+    assert r.status_code == 200
+    body = r.content
+    assert body.startswith(b"\xef\xbb\xbf")
+    text = body.decode("utf-8-sig")
+    assert "散布日,ほ場ID" in text
+    assert "テストP" in text and "X2" in text and "2026-05-12" in text
+
+
+def test_pesticide_record_rejects_other_user_field(app_client):
+    fid = _make_field(app_client, "X3")
+    import hashlib, sqlite3, os
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    # 別ユーザが他人のほ場 ID で書こうとすると 400
+    r = app_client.post(
+        "/pesticide-records/",
+        data={
+            "field_id": fid, "spray_date": "2026-05-13",
+            "pesticide_name": "侵入", "dilution_rate": "",
+            "spray_amount": "", "spray_unit": "", "notes": "",
+        },
+    )
+    assert r.status_code == 400
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

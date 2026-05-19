@@ -1,0 +1,16 @@
+<tr id="record-{{ record.id }}">
+  <td>{{ record.spray_date }}</td>
+  <td>{{ record.field_code }}{% if record.field_name %} <small>({{ record.field_name }})</small>{% endif %}</td>
+  <td>{{ record.pesticide_name }}</td>
+  <td>{{ record.dilution_rate or "" }}</td>
+  <td>{{ ("%.2f" | format(record.spray_amount)) if record.spray_amount is not none else "" }}</td>
+  <td>{{ record.spray_unit or "" }}</td>
+  <td>{{ record.notes or "" }}</td>
+  <td>
+    <button hx-get="/pesticide-records/{{ record.id }}/edit"
+            hx-target="#record-form-slot" hx-swap="innerHTML">編集</button>
+    <button hx-delete="/pesticide-records/{{ record.id }}"
+            hx-target="#record-{{ record.id }}" hx-swap="outerHTML"
+            hx-confirm="削除しますか？">削除</button>
+  </td>
+</tr>
