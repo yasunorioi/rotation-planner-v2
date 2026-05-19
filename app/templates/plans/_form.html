@@ -1,0 +1,17 @@
+{% if plan %}
+<form hx-put="/plans/{{ plan.id }}"
+      hx-target="#plan-{{ plan.id }}" hx-swap="outerHTML"
+      hx-on::after-request="this.closest('#plan-form-slot').innerHTML = '<button hx-get=&quot;/plans/new&quot; hx-target=&quot;#plan-form-slot&quot; hx-swap=&quot;innerHTML&quot;>＋ 新規追加</button>'; htmx.process(this.closest('#plan-form-slot'))">
+{% else %}
+<form hx-post="/plans/"
+      hx-target="#plans-table tbody" hx-swap="afterbegin"
+      hx-on::after-request="this.reset()">
+{% endif %}
+  <label>計画名 <input name="name" required value="{{ plan.name if plan else '' }}"></label>
+  <label>開始年度 <input name="start_year" required placeholder="R7" value="{{ plan.start_year if plan else '' }}"></label>
+  <label>終了年度 <input name="end_year" required placeholder="R11" value="{{ plan.end_year if plan else '' }}"></label>
+  <button type="submit">{{ "更新" if plan else "追加" }}</button>
+  <button type="button"
+          hx-get="/plans/" hx-target="#plan-form-slot" hx-select="#plan-form-slot"
+          hx-swap="outerHTML">キャンセル</button>
+</form>

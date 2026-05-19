@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}輪作計画{% endblock %}
+{% block content %}
+<h2>輪作計画</h2>
+
+<table id="plans-table">
+  <thead>
+    <tr>
+      <th>計画名</th><th>開始</th><th>終了</th><th>更新日時</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for plan in plans %}
+      {% include "plans/_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<div id="plan-form-slot">
+  <button hx-get="/plans/new" hx-target="#plan-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+{% endblock %}

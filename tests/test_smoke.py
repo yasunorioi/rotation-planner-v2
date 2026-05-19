@@ -206,6 +206,83 @@ def test_history_cell_404_for_other_user(app_client):
     assert r.status_code == 404
 
 
+def test_plans_crud(app_client):
+    # 初期は空テーブル
+    r = app_client.get("/plans/")
+    assert r.status_code == 200
+    assert "輪作計画" in r.text
+    assert "plans-table" in r.text
+
+    # 新規作成
+    r = app_client.post(
+        "/plans/",
+        data={"name": "5年計画", "start_year": "R7", "end_year": "R11"},
+    )
+    assert r.status_code == 200
+    assert "5年計画" in r.text and "R7" in r.text and "R11" in r.text
+
+    # 一覧に出る
+    r = app_client.get("/plans/")
+    assert "5年計画" in r.text
+    import re
+    plan_id = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+
+    # 編集
+    r = app_client.put(
+        f"/plans/{plan_id}",
+        data={"name": "5年計画(改)", "start_year": "R7", "end_year": "R12"},
+    )
+    assert r.status_code == 200
+    assert "5年計画(改)" in r.text and "R12" in r.text
+
+    # 削除
+    r = app_client.delete(f"/plans/{plan_id}")
+    assert r.status_code == 200
+    r = app_client.get("/plans/")
+    assert "5年計画" not in r.text
+
+
+def test_plans_404_for_other_user(app_client):
+    r = app_client.post(
+        "/plans/",
+        data={"name": "他人の計画", "start_year": "R7", "end_year": "R11"},
+    )
+    import re
+    plan_id = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+
+    import hashlib, sqlite3, os
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    assert app_client.get(f"/plans/{plan_id}/edit").status_code == 404
+    assert app_client.delete(f"/plans/{plan_id}").status_code == 404
+    assert app_client.put(
+        f"/plans/{plan_id}",
+        data={"name": "侵入", "start_year": "R7", "end_year": "R11"},
+    ).status_code == 404
+
+
+def test_plans_count_on_dashboard(app_client):
+    app_client.post(
+        "/plans/",
+        data={"name": "計画A", "start_year": "R7", "end_year": "R11"},
+    )
+    app_client.post(
+        "/plans/",
+        data={"name": "計画B", "start_year": "R8", "end_year": "R12"},
+    )
+    r = app_client.get("/")
+    # 「2」が3つの数値のどれかに含まれる
+    assert ">2</span><span class=\"lbl\">輪作計画" in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

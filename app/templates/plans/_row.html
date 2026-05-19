@@ -1,0 +1,13 @@
+<tr id="plan-{{ plan.id }}">
+  <td>{{ plan.name }}</td>
+  <td>{{ plan.start_year }}</td>
+  <td>{{ plan.end_year }}</td>
+  <td>{{ plan.updated_at }}</td>
+  <td>
+    <button hx-get="/plans/{{ plan.id }}/edit"
+            hx-target="#plan-form-slot" hx-swap="innerHTML">編集</button>
+    <button hx-delete="/plans/{{ plan.id }}"
+            hx-target="#plan-{{ plan.id }}" hx-swap="outerHTML"
+            hx-confirm="削除しますか？">削除</button>
+  </td>
+</tr>
