@@ -873,6 +873,32 @@ def test_fields_map_page(app_client):
     assert "/fields/polygons.geojson" in r.text
 
 
+def test_plan_pdf_download(app_client):
+    _make_field(app_client, "PDF1")
+    r = app_client.post("/plans/", data={"name": "PDFtest", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{pid}/result.pdf")
+    assert r.status_code == 200
+    assert r.headers.get("content-type", "").startswith("application/pdf")
+    # PDF マジックバイト %PDF-
+    assert r.content.startswith(b"%PDF-")
+    # 一定サイズ以上 (空でない)
+    assert len(r.content) > 1000
+
+
+def test_pesticide_records_pdf(app_client):
+    fid = _make_field(app_client, "PRP1")
+    app_client.post("/pesticide-records/", data={
+        "field_id": fid, "spray_date": "2026-05-10", "pesticide_name": "PDF薬",
+        "dilution_rate": "1000倍", "spray_amount": "0.3", "spray_unit": "L/10a", "notes": "",
+    })
+    r = app_client.get("/pesticide-records/export.pdf")
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF-")
+    assert len(r.content) > 1000
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

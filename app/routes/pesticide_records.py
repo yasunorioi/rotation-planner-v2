@@ -273,6 +273,25 @@ async def import_records(
     )
 
 
+@router.get("/export.pdf")
+def export_pdf(
+    user: CurrentUser,
+    year: str | None = None,
+    field_id: int | None = None,
+):
+    from app.pdf_service import generate_pesticide_records_pdf
+    records = _fetch_records(user["id"], year=year, field_id=field_id)
+    title = "防除記録"
+    if year:
+        title += f" ({year}年)"
+    pdf_bytes = generate_pesticide_records_pdf(records, title=title)
+    return Response(
+        pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="pesticide_records.pdf"'},
+    )
+
+
 @router.get("/export.csv")
 def export_csv(
     user: CurrentUser,

@@ -201,6 +201,22 @@ async def remove_constraint_crop(
     return RedirectResponse(f"/plans/{plan_id}/constraints", status_code=303)
 
 
+@router.get("/{plan_id}/result.pdf")
+def export_result_pdf(user: CurrentUser, plan_id: int):
+    from fastapi.responses import Response
+    from app.optimizer_service import run_optimization_for_plan
+    from app.pdf_service import generate_plan_pdf
+
+    plan = _fetch_plan(user["id"], plan_id)
+    result = run_optimization_for_plan(user["id"], plan)
+    pdf_bytes = generate_plan_pdf(plan, result)
+    return Response(
+        pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="plan_{plan_id}.pdf"'},
+    )
+
+
 @router.get("/{plan_id}/result.csv")
 def export_result_csv(user: CurrentUser, plan_id: int):
     import io, csv

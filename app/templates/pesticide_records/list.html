@@ -30,7 +30,12 @@
   <h3>CSV 取込/出力
     <small>
       <a href="/pesticide-records/template.csv">テンプレート</a> |
-      <a href="/pesticide-records/export.csv{% if filter_year or filter_field_id %}?{% if filter_year %}year={{ filter_year }}{% endif %}{% if filter_year and filter_field_id %}&{% endif %}{% if filter_field_id %}field_id={{ filter_field_id }}{% endif %}{% endif %}">エクスポート</a>
+      {% set qs = "" %}
+      {% if filter_year %}{% set qs = "year=" + filter_year %}{% endif %}
+      {% if filter_field_id %}{% set qs = qs + ("&" if qs else "") + "field_id=" + filter_field_id|string %}{% endif %}
+      {% set qsfull = "?" + qs if qs else "" %}
+      <a href="/pesticide-records/export.csv{{ qsfull }}">CSV</a> /
+      <a href="/pesticide-records/export.pdf{{ qsfull }}">PDF</a>
     </small>
   </h3>
   <form hx-post="/pesticide-records/import" hx-encoding="multipart/form-data"
