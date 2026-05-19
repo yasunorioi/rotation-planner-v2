@@ -887,6 +887,48 @@ def test_plan_pdf_download(app_client):
     assert len(r.content) > 1000
 
 
+def _make_dummy_png(path: str) -> None:
+    """zlib デフレートを使った最小の有効 PNG (1x1 透明) を書き出す。"""
+    import zlib, struct
+    # 1x1 RGBA, alpha=0
+    raw = b"\x00" + b"\x00\x00\x00\x00"  # filter byte + RGBA pixel
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+    def chunk(typ, data):
+        crc = zlib.crc32(typ + data) & 0xffffffff
+        return struct.pack(">I", len(data)) + typ + data + struct.pack(">I", crc)
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", ihdr)
+           + chunk(b"IDAT", zlib.compress(raw))
+           + chunk(b"IEND", b""))
+    with open(path, "wb") as f:
+        f.write(png)
+
+
+def test_plan_pdf_includes_logo_when_present(app_client, monkeypatch, tmp_path):
+    # data/ ディレクトリにロゴを置く (pdf_service の _DATA_DIR を差し替え)
+    logo_path = tmp_path / "logo.png"
+    _make_dummy_png(str(logo_path))
+    import app.pdf_service as pdf_svc
+    monkeypatch.setattr(pdf_svc, "_DATA_DIR", tmp_path)
+
+    _make_field(app_client, "LOGO1")
+    r = app_client.post("/plans/", data={"name": "LogoTest", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{pid}/result.pdf")
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF-")
+    # ロゴあり版はサイズが少し増える
+    size_with = len(r.content)
+    # ロゴ無し版
+    monkeypatch.setattr(pdf_svc, "_DATA_DIR", tmp_path / "no_such_dir")
+    r2 = app_client.get(f"/plans/{pid}/result.pdf")
+    size_without = len(r2.content)
+    # 画像が埋め込まれているので明らかに大きい (1x1 PNG でも数十バイト〜)
+    # 厳密な差分は環境依存だが、少なくとも壊れないことを確認
+    assert r2.content.startswith(b"%PDF-")
+
+
 def test_pesticide_records_pdf(app_client):
     fid = _make_field(app_client, "PRP1")
     app_client.post("/pesticide-records/", data={

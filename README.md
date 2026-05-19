@@ -26,3 +26,10 @@ uvicorn app.main:app --reload
 - JWT 廃止 → HTTP Basic auth
 - React 廃止 → HTMX (サーバレンダリング)
 - ほ場ポリゴン描画のみ Leaflet を独立島として残す
+
+## PDF にロゴを入れる
+
+`data/logo.png` (もしくは `.jpg` / `.gif`) を置けば、計画 PDF と防除記録 PDF
+のヘッダに自動で表示されます。22mm×22mm に縦横比保持で収まります。
+ファイルがなければロゴなしで出力。`data/` は gitignore 対象なのでリポジトリに
+コミットされません。

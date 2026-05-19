@@ -1,10 +1,12 @@
 """PDF 出力サービス — reportlab で輪作計画と防除記録の PDF を生成。
 
 日本語フォントはシステムにある Noto Sans CJK を優先、なければフォールバック。
+ロゴは <project-root>/data/logo.{png,jpg,gif} があれば PDF ヘッダに表示。
 """
 import io
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 
@@ -20,7 +22,18 @@ _FONT_PATHS = [
     "/Library/Fonts/Arial Unicode.ttf",
 ]
 
+_LOGO_CANDIDATES = ("logo.png", "logo.jpg", "logo.jpeg", "logo.gif")
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
 _registered = False
+
+
+def _find_logo() -> Path | None:
+    for name in _LOGO_CANDIDATES:
+        p = _DATA_DIR / name
+        if p.exists():
+            return p
+    return None
 
 
 def _ensure_font() -> str:
@@ -42,6 +55,40 @@ def _ensure_font() -> str:
         except Exception:
             continue
     return "Helvetica"  # フォールバック (日本語は化ける)
+
+
+def _header_block(title: str, subtitle: str, font: str):
+    """ロゴ (あれば) と タイトル/サブタイトル を横並びにした Flowable を返す。"""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Image, Paragraph, Table, TableStyle
+
+    title_style = ParagraphStyle(name="title", fontName=font, fontSize=16, spaceAfter=2)
+    sub_style = ParagraphStyle(name="sub", fontName=font, fontSize=10, textColor=colors.grey)
+
+    text_cell = [Paragraph(title, title_style), Paragraph(subtitle, sub_style)]
+    logo = _find_logo()
+    if logo is not None:
+        try:
+            img = Image(str(logo), width=22 * mm, height=22 * mm, kind="proportional")
+            row = [[img, text_cell]]
+            col_widths = [25 * mm, None]
+        except Exception:
+            row = [[text_cell]]
+            col_widths = [None]
+    else:
+        row = [[text_cell]]
+        col_widths = [None]
+    tbl = Table(row, colWidths=col_widths)
+    tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    return tbl
 
 
 def generate_plan_pdf(plan: dict, result: dict) -> bytes:
@@ -66,20 +113,17 @@ def generate_plan_pdf(plan: dict, result: dict) -> bytes:
         topMargin=15 * mm, bottomMargin=15 * mm,
     )
 
-    title_style = ParagraphStyle(
-        name="title", fontName=font, fontSize=16, spaceAfter=6,
-    )
     meta_style = ParagraphStyle(
         name="meta", fontName=font, fontSize=10, textColor=colors.grey, spaceAfter=10,
     )
     h2 = ParagraphStyle(name="h2", fontName=font, fontSize=12, spaceBefore=10, spaceAfter=4)
 
     story = []
-    story.append(Paragraph(plan["name"], title_style))
-    story.append(Paragraph(
+    story.append(_header_block(
+        plan["name"],
         f"対象年度: {plan['start_year']} 〜 {plan['end_year']} | "
         f"生成日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        meta_style,
+        font,
     ))
 
     if not result.get("ok"):
@@ -144,14 +188,8 @@ def generate_pesticide_records_pdf(records: list[dict], title: str = "防除記�
     """防除記録 PDF を生成して bytes を返す。"""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import (
-        SimpleDocTemplate,
-        Paragraph,
-        Table,
-        TableStyle,
-    )
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
     font = _ensure_font()
     buf = io.BytesIO()
@@ -160,12 +198,13 @@ def generate_pesticide_records_pdf(records: list[dict], title: str = "防除記�
         leftMargin=15 * mm, rightMargin=15 * mm,
         topMargin=15 * mm, bottomMargin=15 * mm,
     )
-    title_style = ParagraphStyle(name="title", fontName=font, fontSize=16, spaceAfter=6)
-    meta_style = ParagraphStyle(name="meta", fontName=font, fontSize=10, textColor=colors.grey, spaceAfter=10)
 
     story = [
-        Paragraph(title, title_style),
-        Paragraph(f"件数: {len(records)} | 出力日: {datetime.now().strftime('%Y-%m-%d')}", meta_style),
+        _header_block(
+            title,
+            f"件数: {len(records)} | 出力日: {datetime.now().strftime('%Y-%m-%d')}",
+            font,
+        ),
     ]
 
     header = ["散布日", "圃場", "農薬名", "希釈倍率", "量", "単位", "備考"]
