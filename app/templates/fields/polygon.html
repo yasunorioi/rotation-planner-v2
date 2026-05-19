@@ -14,6 +14,19 @@
 
 <h2>ポリゴン編集 — {{ field.field_code }} {{ field.name or "" }}</h2>
 
+<p class="area-info">
+  DB の area_ha: <strong>{{ "%.2f"|format(field.area_ha) }}</strong> ha
+  {% if computed_area_ha is not none %}
+    | 計算面積 (ポリゴンから測地線): <strong>{{ "%.2f"|format(computed_area_ha) }}</strong> ha
+    {% set diff = (field.area_ha - computed_area_ha)|abs %}
+    {% if diff > 0.01 %}
+      <form method="post" action="/fields/{{ field.id }}/polygon/sync_area" style="display:inline;background:none;border:0;padding:0;">
+        <button type="submit" class="sync-area-btn">area_ha を計算値で更新</button>
+      </form>
+    {% endif %}
+  {% endif %}
+</p>
+
 <form id="polygon-form" method="post" action="/fields/{{ field.id }}/polygon">
   <input type="hidden" name="geojson" id="geojson-input">
   <div class="polygon-toolbar">

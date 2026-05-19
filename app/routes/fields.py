@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import os
 import re
 from pathlib import Path
 
@@ -176,11 +177,30 @@ def delete_field(user: CurrentUser, field_id: int):
     return Response(status_code=200)
 
 
+def _geodesic_area_ha(geojson_feature: dict | None) -> float | None:
+    """GeoJSON Feature/Geometry から測地線面積(ha)を計算。失敗時 None。"""
+    if not geojson_feature:
+        return None
+    geom = geojson_feature.get("geometry") if geojson_feature.get("type") == "Feature" else geojson_feature
+    if not geom or geom.get("type") != "Polygon":
+        return None
+    coords = geom.get("coordinates") or []
+    if not coords or len(coords[0]) < 3:
+        return None
+    try:
+        from shapely.geometry import Polygon as _ShPoly
+        from rotation_planner.field.spatial import calculate_geodesic_area_ha
+        ring = [(p[0], p[1]) for p in coords[0]]
+        return round(calculate_geodesic_area_ha(_ShPoly(ring)), 4)
+    except Exception:
+        return None
+
+
 @router.get("/{field_id}/polygon")
 def polygon_editor(request: Request, user: CurrentUser, field_id: int):
     with connect() as conn:
         row = conn.execute(
-            "SELECT id, field_code, name, coordinates_json FROM fields "
+            "SELECT id, field_code, name, area_ha, coordinates_json FROM fields "
             "WHERE id = ? AND user_id = ?",
             (field_id, user["id"]),
         ).fetchone()
@@ -199,6 +219,7 @@ def polygon_editor(request: Request, user: CurrentUser, field_id: int):
         {
             "user": user,
             "field": dict(row),
+            "computed_area_ha": _geodesic_area_ha(existing),
             "map_data": {
                 "center": SAPPORO,
                 "zoom": 10,
@@ -218,6 +239,163 @@ def download_template():
         io.BytesIO(body),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="fields_template.csv"'},
+    )
+
+
+@router.post("/import_kml")
+async def import_kml(
+    request: Request,
+    user: CurrentUser,
+    file: UploadFile = File(...),
+):
+    """KML / KMZ をアップロードして、ほ場ポリゴン (+面積) を upsert。
+    各 Placemark の name を field_code として扱う。同名は更新、新規は追加。"""
+    from rotation_planner.field.kml_parser import parse_kml_or_kmz_bytes
+
+    raw = await file.read()
+    try:
+        items = parse_kml_or_kmz_bytes(raw, file.filename or "uploaded.kml")
+    except Exception as e:
+        raise HTTPException(400, f"KML/KMZ パース失敗: {e}")
+
+    if not items:
+        return templates.TemplateResponse(
+            request,
+            "fields/_import_result.html",
+            {"summary": "Placemark が見つかりませんでした", "errors": []},
+        )
+
+    added = 0
+    updated = 0
+    errors: list[str] = []
+    with connect() as conn:
+        for i, item in enumerate(items, start=1):
+            name = (item.get("name") or "").strip() or f"placemark_{i}"
+            coords = item.get("coordinates")
+            if not coords or len(coords) < 3:
+                errors.append(f"{name}: 座標が不正")
+                continue
+            # ライブラリの KML パーサは [lat, lng] を返すので、
+            # GeoJSON 標準の [lng, lat] にスワップ
+            ring = [[p[1], p[0]] for p in coords]
+            # KML の座標は閉じてない場合もある → 閉じる
+            if ring[0] != ring[-1]:
+                ring.append(ring[0])
+            feature = {
+                "type": "Feature",
+                "properties": {"source": "kml"},
+                "geometry": {"type": "Polygon", "coordinates": [ring]},
+            }
+            coords_json = json.dumps(feature, ensure_ascii=False)
+            area_ha = float(item.get("area_ha") or 0.0)
+
+            existing = conn.execute(
+                "SELECT id FROM fields WHERE user_id = ? AND field_code = ?",
+                (user["id"], name),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE fields SET coordinates_json = ?, area_ha = ?, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (coords_json, area_ha, existing["id"]),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    "INSERT INTO fields (user_id, field_code, name, area_ha, coordinates_json) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (user["id"], name, name, area_ha, coords_json),
+                )
+                added += 1
+
+    summary = f"KML 取込完了: 追加 {added} / 更新 {updated}"
+    if errors:
+        summary += f" / エラー {len(errors)} 件"
+    return templates.TemplateResponse(
+        request,
+        "fields/_import_result.html",
+        {"summary": summary, "errors": errors[:20]},
+    )
+
+
+@router.get("/polygons.kml")
+def export_polygons_kml(user: CurrentUser):
+    """ユーザーのほ場ポリゴンを KML として返す。"""
+    from rotation_planner.field.kml_parser import generate_kml_content
+
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT field_code, name, district, area_ha, coordinates_json "
+            "FROM fields WHERE user_id = ? AND coordinates_json IS NOT NULL "
+            "ORDER BY field_code",
+            (user["id"],),
+        ).fetchall()
+    items: list[dict] = []
+    for r in rows:
+        try:
+            feat = json.loads(r["coordinates_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        geom = feat.get("geometry") if feat.get("type") == "Feature" else feat
+        if not geom or geom.get("type") != "Polygon":
+            continue
+        coords = geom.get("coordinates", [[]])[0]
+        # GeoJSON [lng, lat] → ライブラリの generate_kml_content が期待する [lat, lng]
+        coords_lat_lng = [[c[1], c[0]] for c in coords]
+        items.append({
+            "name": r["field_code"],
+            "description": f"{r['name'] or ''} / {r['district'] or ''} / {r['area_ha']:.2f}ha",
+            "coordinates": coords_lat_lng,
+        })
+    kml = generate_kml_content(items, name="rotation-planner ほ場")
+    return Response(
+        kml.encode("utf-8"),
+        media_type="application/vnd.google-earth.kml+xml",
+        headers={"Content-Disposition": 'attachment; filename="fields.kml"'},
+    )
+
+
+@router.get("/polygons.kmz")
+def export_polygons_kmz(user: CurrentUser):
+    """KMZ (zip された KML) を返す。"""
+    import tempfile
+    from rotation_planner.field.kml_parser import export_fields_to_kmz
+
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT field_code, name, district, area_ha, coordinates_json "
+            "FROM fields WHERE user_id = ? AND coordinates_json IS NOT NULL",
+            (user["id"],),
+        ).fetchall()
+    items = []
+    for r in rows:
+        try:
+            feat = json.loads(r["coordinates_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        geom = feat.get("geometry") if feat.get("type") == "Feature" else feat
+        if not geom or geom.get("type") != "Polygon":
+            continue
+        coords = geom.get("coordinates", [[]])[0]
+        # GeoJSON [lng, lat] → ライブラリの export が期待する [lat, lng]
+        coords_lat_lng = [[c[1], c[0]] for c in coords]
+        items.append({
+            "name": r["field_code"],
+            "description": f"{r['name'] or ''} / {r['district'] or ''} / {r['area_ha']:.2f}ha",
+            "coordinates": coords_lat_lng,
+        })
+    with tempfile.NamedTemporaryFile(suffix=".kmz", delete=False) as tmp:
+        kmz_path = tmp.name
+    try:
+        export_fields_to_kmz(items, kmz_path, name="rotation-planner ほ場")
+        with open(kmz_path, "rb") as f:
+            body = f.read()
+    finally:
+        os.unlink(kmz_path)
+    return Response(
+        body,
+        media_type="application/vnd.google-earth.kmz",
+        headers={"Content-Disposition": 'attachment; filename="fields.kmz"'},
     )
 
 
@@ -454,6 +632,30 @@ async def import_csv(
         "fields/_import_result.html",
         {"summary": summary, "errors": errors[:20]},
     )
+
+
+@router.post("/{field_id}/polygon/sync_area")
+def sync_area_from_polygon(user: CurrentUser, field_id: int):
+    """coordinates_json の測地線面積を area_ha に書き込む。"""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT coordinates_json FROM fields WHERE id = ? AND user_id = ?",
+            (field_id, user["id"]),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "ほ場が見つかりません")
+        try:
+            feat = json.loads(row["coordinates_json"]) if row["coordinates_json"] else None
+        except json.JSONDecodeError:
+            feat = None
+        area = _geodesic_area_ha(feat)
+        if area is None:
+            raise HTTPException(400, "ポリゴンが登録されていないか、面積を計算できません")
+        conn.execute(
+            "UPDATE fields SET area_ha = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (area, field_id),
+        )
+    return RedirectResponse(f"/fields/{field_id}/polygon", status_code=303)
 
 
 @router.post("/{field_id}/polygon")

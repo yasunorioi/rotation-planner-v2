@@ -899,6 +899,148 @@ def test_pesticide_records_pdf(app_client):
     assert len(r.content) > 1000
 
 
+def test_polygon_computed_area_displayed(app_client):
+    fid = _make_field(app_client, "AC1")  # area_ha=1.0
+    # 大きめのポリゴン (~緯度1度差は約111km)
+    import json
+    poly = {"type": "Feature", "geometry": {"type": "Polygon",
+            "coordinates": [[[141.0, 43.0], [141.01, 43.0], [141.01, 43.01], [141.0, 43.01], [141.0, 43.0]]]}}
+    app_client.post(f"/fields/{fid}/polygon", data={"geojson": json.dumps(poly)})
+    r = app_client.get(f"/fields/{fid}/polygon")
+    assert r.status_code == 200
+    # 計算面積が出る
+    assert "計算面積" in r.text
+    # 同期ボタンが出る (area_ha=1.0 ha vs 計算 ~91ha 程度の差があるはず)
+    assert "area_ha を計算値で更新" in r.text
+
+
+def test_polygon_sync_area(app_client):
+    fid = _make_field(app_client, "AC2")
+    import json
+    poly = {"type": "Feature", "geometry": {"type": "Polygon",
+            "coordinates": [[[141.0, 43.0], [141.001, 43.0], [141.001, 43.001], [141.0, 43.001], [141.0, 43.0]]]}}
+    app_client.post(f"/fields/{fid}/polygon", data={"geojson": json.dumps(poly)})
+    r = app_client.post(f"/fields/{fid}/polygon/sync_area", follow_redirects=False)
+    assert r.status_code == 303
+    # area_ha が更新されている
+    r = app_client.get("/fields/")
+    import re
+    row = re.search(rf'id="field-{fid}".+?</tr>', r.text, re.DOTALL).group(0)
+    # 1.0 ではなく、計算された値
+    assert "1.00" not in row.split("</td>")[3]  # area 列
+
+
+def test_polygon_sync_area_404_without_polygon(app_client):
+    fid = _make_field(app_client, "AC3")
+    r = app_client.post(f"/fields/{fid}/polygon/sync_area")
+    assert r.status_code == 400
+
+
+def test_kml_import_and_export(app_client):
+    kml = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>KML001</name>
+      <description>サンプル北畑</description>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>141.0,43.0,0 141.001,43.0,0 141.001,43.001,0 141.0,43.001,0 141.0,43.0,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>KML002</name>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>141.1,43.1,0 141.101,43.1,0 141.101,43.101,0 141.1,43.101,0 141.1,43.1,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>
+"""
+    r = app_client.post(
+        "/fields/import_kml",
+        files={"file": ("test.kml", kml.encode("utf-8"), "application/vnd.google-earth.kml+xml")},
+    )
+    assert r.status_code == 200
+    assert "追加 2" in r.text
+    # 一覧で確認
+    r = app_client.get("/fields/")
+    assert "KML001" in r.text and "KML002" in r.text
+    # ポリゴン有印が立つ
+    import re
+    row = re.search(r'id="field-\d+".+?KML001.+?</tr>', r.text, re.DOTALL).group(0)
+    assert row.count("✓") >= 1
+
+    # 再アップロードは更新
+    r = app_client.post(
+        "/fields/import_kml",
+        files={"file": ("test.kml", kml.encode("utf-8"), "application/vnd.google-earth.kml+xml")},
+    )
+    assert "更新 2" in r.text
+
+    # 取込された polygon の座標は GeoJSON 標準 [lng, lat] になっているか確認
+    # (ライブラリ KML パーサは [lat, lng] を返すので変換が必要)
+    r = app_client.get("/fields/polygons.geojson")
+    fc = r.json()
+    feat_by_name = {f["properties"]["field_code"]: f for f in fc["features"]}
+    coords = feat_by_name["KML001"]["geometry"]["coordinates"][0]
+    # KML 入力の最初の点は 141.0, 43.0 (lng, lat)
+    assert abs(coords[0][0] - 141.0) < 0.01, f"lng が先頭でない: {coords[0]}"
+    assert abs(coords[0][1] - 43.0) < 0.01, f"lat が2番目でない: {coords[0]}"
+
+    # 取込された polygon から測地線面積が正しく計算できる (NaN にならない)
+    import math
+    poly_editor = app_client.get(f"/fields/{int(feat_by_name['KML001']['properties']['id'])}/polygon")
+    assert "計算面積" in poly_editor.text
+    assert "nan" not in poly_editor.text  # NaN は座標順バグの兆候
+
+    # KML エクスポート: 座標順が lng,lat,alt として正しい
+    r = app_client.get("/fields/polygons.kml")
+    assert r.status_code == 200
+    text = r.content.decode("utf-8")
+    assert "<kml" in text and "KML001" in text
+    # KML coordinates 内の最初の点を抽出: 経度,緯度,高度 形式
+    import re
+    m = re.search(r"<coordinates>\s*([^<]+?)\s*</coordinates>", text)
+    assert m, "coordinates 要素が見つからない"
+    first_point = m.group(1).split()[0].split(",")
+    lng_out, lat_out = float(first_point[0]), float(first_point[1])
+    # KML001 は [141.0, 43.0] あたり
+    assert 140 < lng_out < 142, f"KML 出力の経度が変: {lng_out}"
+    assert 42 < lat_out < 44, f"KML 出力の緯度が変: {lat_out}"
+
+
+def test_kml_import_invalid_file(app_client):
+    r = app_client.post(
+        "/fields/import_kml",
+        files={"file": ("not.kml", b"garbage", "application/vnd.google-earth.kml+xml")},
+    )
+    # パースエラーは 400 (parse_kml_or_kmz_bytes はその場合 [] を返すこともある)
+    # 空ファイル扱いになるかもしれないので結果メッセージで判定
+    assert r.status_code in (200, 400)
+    if r.status_code == 200:
+        assert "Placemark が見つかりませんでした" in r.text
+
+
+def test_kmz_export(app_client):
+    fid = _make_field(app_client, "KMZ1")
+    import json
+    poly = {"type": "Feature", "geometry": {"type": "Polygon",
+            "coordinates": [[[141.0, 43.0], [141.001, 43.0], [141.001, 43.001], [141.0, 43.0]]]}}
+    app_client.post(f"/fields/{fid}/polygon", data={"geojson": json.dumps(poly)})
+    r = app_client.get("/fields/polygons.kmz")
+    assert r.status_code == 200
+    # KMZ = ZIP
+    assert r.content.startswith(b"PK")
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

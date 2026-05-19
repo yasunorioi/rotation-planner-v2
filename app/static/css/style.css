@@ -107,3 +107,5 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .filter-bar label { display: flex; gap: 0.3rem; align-items: center; font-size: 0.9rem; }
 .filter-bar select { padding: 0.25rem; }
 .csv-link { color: #2d6a4f; }
+.area-info { background: #fff; border: 1px solid #d8d8d8; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.9rem; }
+.sync-area-btn { background: #2d6a4f; color: #fff; border: 0; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-left: 0.5rem; }
