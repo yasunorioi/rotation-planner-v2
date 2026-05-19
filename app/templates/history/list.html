@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}作付履歴{% endblock %}
+{% block content %}
+<h2>作付履歴</h2>
+
+<form method="get" action="/history/" class="year-range">
+  <label>年度範囲:
+    <input type="text" name="from" value="{{ from_y }}" size="4" placeholder="R5">
+    〜
+    <input type="text" name="to" value="{{ to_y }}" size="4" placeholder="R10">
+  </label>
+  <button type="submit">表示</button>
+</form>
+
+{% if not fields %}
+<p>ほ場が登録されていません。 <a href="/fields/">ほ場一覧</a> から追加してください。</p>
+{% else %}
+<table id="history-table">
+  <thead>
+    <tr>
+      <th>圃場</th>
+      {% for year in years %}<th>{{ year }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for field in fields %}
+    <tr>
+      <th class="field-label">{{ field.field_code }}<br><small>{{ field.name or "" }}</small></th>
+      {% for year in years %}
+        {% with %}
+          {% set field_id = field.id %}
+          {% set crop = grid.get((field.id, year), "") %}
+          {% include "history/_cell.html" %}
+        {% endwith %}
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="hint">セルをクリックして作物名を編集。空文字で保存すると履歴を削除します。</p>
+{% endif %}
+{% endblock %}

@@ -138,6 +138,74 @@ def test_polygon_rejects_malformed_json(app_client):
     assert r.status_code == 400
 
 
+def test_history_empty_state(app_client):
+    r = app_client.get("/history/")
+    assert r.status_code == 200
+    assert "作付履歴" in r.text
+    assert "ほ場が登録されていません" in r.text
+
+
+def test_history_pivot_table_renders(app_client):
+    fid = _create_field(app_client)
+    r = app_client.get("/history/?from=R5&to=R8")
+    assert r.status_code == 200
+    # ヘッダに年が並ぶ
+    for y in ["R5", "R6", "R7", "R8"]:
+        assert f">{y}</th>" in r.text
+    # 行にほ場コードが出る
+    assert "P001" in r.text
+    # セルの hx-get URL に field_id がちゃんと埋め込まれている
+    assert f"field_id={fid}&year=R5" in r.text
+    assert f"field_id={fid}&year=R8" in r.text
+
+
+def test_history_cell_edit_save_clear(app_client):
+    fid = _create_field(app_client)
+    # 編集モード取得
+    r = app_client.get(f"/history/cell/edit?field_id={fid}&year=R6")
+    assert r.status_code == 200
+    assert 'name="crop"' in r.text
+    # 保存
+    r = app_client.post(
+        "/history/cell",
+        data={"field_id": fid, "year": "R6", "crop": "てんさい"},
+    )
+    assert r.status_code == 200
+    assert "てんさい" in r.text
+    # 一覧で見える
+    r = app_client.get("/history/?from=R5&to=R8")
+    assert "てんさい" in r.text
+    # 空文字保存 → 削除
+    r = app_client.post(
+        "/history/cell",
+        data={"field_id": fid, "year": "R6", "crop": ""},
+    )
+    assert r.status_code == 200
+    r = app_client.get("/history/?from=R5&to=R8")
+    assert "てんさい" not in r.text
+
+
+def test_history_cell_404_for_other_user(app_client):
+    fid = _create_field(app_client)
+    import hashlib, sqlite3, os
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    assert app_client.get(f"/history/cell/edit?field_id={fid}&year=R6").status_code == 404
+    r = app_client.post(
+        "/history/cell",
+        data={"field_id": fid, "year": "R6", "crop": "侵入"},
+    )
+    assert r.status_code == 404
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る
