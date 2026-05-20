@@ -139,3 +139,9 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .cell-diff-sample { background: #fff3cd; }
 .cell-planned-only-sample { background: #e3f2fd; }
 .cell-actual-only-sample { background: #f0f0f0; }
+
+.detail-meta { background: #fff; margin-bottom: 1rem; }
+.detail-meta th { background: #f0f0f0; text-align: left; font-weight: normal; width: 10rem; }
+.detail-meta td { background: #fff; }
+.field-history-table, .field-records-table { background: #fff; margin-bottom: 1.5rem; }
+.field-history-table small, .field-records-table small { color: #888; }

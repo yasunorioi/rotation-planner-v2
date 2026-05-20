@@ -1,5 +1,5 @@
 <tr id="field-{{ field.id }}">
-  <td>{{ field.field_code }}</td>
+  <td><a href="/fields/{{ field.id }}/detail">{{ field.field_code }}</a></td>
   <td>{{ field.district or "" }}</td>
   <td>{{ field.name or "" }}</td>
   <td>{{ "%.2f"|format(field.area_ha) }}</td>

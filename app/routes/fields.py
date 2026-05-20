@@ -188,6 +188,33 @@ def edit_field_form(request: Request, user: CurrentUser, field_id: int):
     )
 
 
+@router.get("/{field_id}/detail")
+def field_detail(request: Request, user: CurrentUser, field_id: int):
+    """1ほ場の年表 + 最近の防除記録。"""
+    field = _fetch_field(user["id"], field_id)
+    with connect() as conn:
+        history_rows = conn.execute(
+            "SELECT year, crop, is_inferred, created_at FROM crop_history "
+            "WHERE field_id = ? ORDER BY year DESC",
+            (field_id,),
+        ).fetchall()
+        records = conn.execute(
+            "SELECT id, spray_date, pesticide_name, dilution_rate, spray_amount, spray_unit, notes "
+            "FROM pesticide_records WHERE field_id = ? AND user_id = ? "
+            "ORDER BY spray_date DESC, id DESC LIMIT 20",
+            (field_id, user["id"]),
+        ).fetchall()
+    return templates.TemplateResponse(
+        request, "fields/detail.html",
+        {
+            "user": user,
+            "field": field,
+            "history": [dict(r) for r in history_rows],
+            "records": [dict(r) for r in records],
+        },
+    )
+
+
 @router.put("/{field_id}", response_class=HTMLResponse)
 def update_field(
     request: Request,

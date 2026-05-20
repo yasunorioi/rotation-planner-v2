@@ -1379,6 +1379,41 @@ def test_plan_compare_shows_diff(app_client):
     assert "ぜったい違う作物" in r.text
 
 
+def test_field_detail_page(app_client):
+    fid = _make_field(app_client, "DT1")
+    # 履歴 + 防除記録投入
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "だいず"})
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "てんさい"})
+    app_client.post("/pesticide-records/", data={
+        "field_id": fid, "spray_date": "2026-05-10", "pesticide_name": "薬X",
+        "dilution_rate": "1000倍", "spray_amount": "0.3", "spray_unit": "L/10a", "notes": "",
+    })
+    r = app_client.get(f"/fields/{fid}/detail")
+    assert r.status_code == 200
+    assert "DT1" in r.text
+    # 履歴セクション
+    assert "作付履歴 (2 件)" in r.text
+    assert "だいず" in r.text and "てんさい" in r.text
+    # 防除記録セクション
+    assert "薬X" in r.text and "2026-05-10" in r.text
+
+
+def test_field_detail_404_for_other_user(app_client):
+    fid = _make_field(app_client, "DT2")
+    import hashlib, sqlite3, os
+    db = os.environ["ROTATION_DB"]
+    conn = sqlite3.connect(db)
+    pw = hashlib.sha256(b"other").hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)",
+        ("other", pw, "別人", "farmer"),
+    )
+    conn.commit()
+    conn.close()
+    app_client.auth = ("other", "other")
+    assert app_client.get(f"/fields/{fid}/detail").status_code == 404
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

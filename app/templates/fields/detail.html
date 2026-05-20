@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ field.field_code }} {{ field.name or "" }} — 詳細{% endblock %}
+{% block content %}
+<p><a href="/fields/">← ほ場一覧</a></p>
+<h2>{{ field.field_code }} {% if field.name %}<small>{{ field.name }}</small>{% endif %}</h2>
+
+<table class="detail-meta">
+  <tr><th>地区</th><td>{{ field.district or "—" }}</td></tr>
+  <tr><th>面積</th><td>{{ "%.2f"|format(field.area_ha) }} ha ({{ "%.1f"|format(field.area_ha * 100) }} a)</td></tr>
+  <tr><th>てんさい禁忌</th><td>{{ "✓" if field.beet_forbidden else "—" }}</td></tr>
+  <tr><th>固定作物</th><td>{{ field.fixed_crop or "—" }}</td></tr>
+  <tr><th>ポリゴン</th><td>
+    {% if field.has_polygon %}
+      ✓ 登録済 <a href="/fields/{{ field.id }}/polygon">編集</a>
+    {% else %}
+      未登録 <a href="/fields/{{ field.id }}/polygon">描画する</a>
+    {% endif %}
+  </td></tr>
+  <tr><th>備考</th><td>{{ field.notes or "—" }}</td></tr>
+</table>
+
+<h3>作付履歴 ({{ history|length }} 件)</h3>
+{% if not history %}
+<p class="hint">履歴がありません。<a href="/history/">作付履歴ページ</a>で入力できます。</p>
+{% else %}
+<table class="field-history-table">
+  <thead><tr><th>年度</th><th>作物</th></tr></thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      <td>{{ h.year }}</td>
+      <td>{{ h.crop }}{% if h.is_inferred %} <small>(推定)</small>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h3>防除記録 (最新20件)</h3>
+{% if not records %}
+<p class="hint">防除記録がありません。<a href="/pesticide-records/">防除記録ページ</a>で追加できます。</p>
+{% else %}
+<table class="field-records-table">
+  <thead>
+    <tr><th>散布日</th><th>農薬名</th><th>希釈倍率</th><th>量</th><th>単位</th><th>備考</th></tr>
+  </thead>
+  <tbody>
+    {% for r in records %}
+    <tr>
+      <td>{{ r.spray_date }}</td>
+      <td>{{ r.pesticide_name }}</td>
+      <td>{{ r.dilution_rate or "" }}</td>
+      <td>{{ "%.2f"|format(r.spray_amount) if r.spray_amount is not none else "" }}</td>
+      <td>{{ r.spray_unit or "" }}</td>
+      <td>{{ r.notes or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
