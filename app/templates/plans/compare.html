@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}比較 — {{ plan.name }}{% endblock %}
+{% block content %}
+<p><a href="/plans/{{ plan.id }}">← {{ plan.name }} に戻る</a></p>
+<h2>計画 vs 実績 — {{ plan.name }}</h2>
+
+{% if not snapshot %}
+<p class="hint">この計画にはまだスナップショットがありません。計画詳細から「スナップショット保存」を押してください。</p>
+{% else %}
+<p>スナップショット作成: {{ snapshot.taken_at }} (スコア {{ "%.1f"|format(snapshot.score) if snapshot.score is not none else "-" }})</p>
+
+<table class="compare-table">
+  <thead>
+    <tr>
+      <th>圃場</th>
+      {% for y in snapshot.past_years + snapshot.future_years %}<th>{{ y }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for code in snapshot.field_codes %}
+    <tr>
+      <th class="field-label">{{ code }}</th>
+      {% for y in snapshot.past_years + snapshot.future_years %}
+        {% set planned = snapshot.grid.get(code ~ "|" ~ y, "") %}
+        {% set actual = actual.get((code, y), "") %}
+        {% if planned and actual %}
+          {% if planned == actual %}
+          <td class="cell-match" title="一致">{{ planned }}</td>
+          {% else %}
+          <td class="cell-diff" title="計画: {{ planned }} / 実績: {{ actual }}">
+            <span class="planned">{{ planned }}</span>
+            <span class="arrow">→</span>
+            <span class="actual">{{ actual }}</span>
+          </td>
+          {% endif %}
+        {% elif planned %}
+        <td class="cell-planned-only" title="計画のみ ({{ planned }})">
+          <span class="planned">{{ planned }}</span>
+          <span class="hint-inline">(未実績)</span>
+        </td>
+        {% elif actual %}
+        <td class="cell-actual-only" title="計画外で実績あり ({{ actual }})">
+          <span class="actual">{{ actual }}</span>
+        </td>
+        {% else %}
+        <td>—</td>
+        {% endif %}
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p class="legend">
+  <span class="cell-match-sample">緑</span> 一致 |
+  <span class="cell-diff-sample">黄</span> 差分 (計画→実績) |
+  <span class="cell-planned-only-sample">青</span> 未実績 |
+  <span class="cell-actual-only-sample">灰</span> 計画外実績
+</p>
+{% endif %}
+{% endblock %}

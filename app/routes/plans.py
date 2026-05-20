@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent
 def _fetch_plans(user_id: int) -> list[dict]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id, name, start_year, end_year, constraints_json, created_at, updated_at "
+            "SELECT id, name, start_year, end_year, constraints_json, metadata_json, created_at, updated_at "
             "FROM rotation_plans WHERE user_id = ? ORDER BY id DESC",
             (user_id,),
         ).fetchall()
@@ -28,7 +28,7 @@ def _fetch_plans(user_id: int) -> list[dict]:
 def _fetch_plan(user_id: int, plan_id: int) -> dict:
     with connect() as conn:
         row = conn.execute(
-            "SELECT id, name, start_year, end_year, constraints_json, created_at, updated_at "
+            "SELECT id, name, start_year, end_year, constraints_json, metadata_json, created_at, updated_at "
             "FROM rotation_plans WHERE id = ? AND user_id = ?",
             (plan_id, user_id),
         ).fetchone()
@@ -199,6 +199,70 @@ async def remove_constraint_crop(
             (_json.dumps(constraints, ensure_ascii=False), plan_id, user["id"]),
         )
     return RedirectResponse(f"/plans/{plan_id}/constraints", status_code=303)
+
+
+@router.post("/{plan_id}/snapshot", response_class=HTMLResponse)
+def snapshot_plan(request: Request, user: CurrentUser, plan_id: int):
+    """現在の計画結果をスナップショットとして metadata_json に保存。"""
+    from datetime import datetime as _dt
+    import json as _json
+    from app.optimizer_service import run_optimization_for_plan
+
+    plan = _fetch_plan(user["id"], plan_id)
+    result = run_optimization_for_plan(user["id"], plan)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("message", "最適化失敗"))
+
+    # grid のキーは tuple なので、JSON 化のため文字列キーへ変換
+    serializable_grid = {f"{code}|{y}": crop for (code, y), crop in result["grid"].items()}
+    snapshot = {
+        "taken_at": _dt.now().isoformat(timespec="seconds"),
+        "score": result.get("score"),
+        "past_years": result["past_years"],
+        "future_years": result["future_years"],
+        "field_codes": result["field_codes"],
+        "grid": serializable_grid,
+    }
+    with connect() as conn:
+        conn.execute(
+            "UPDATE rotation_plans SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND user_id = ?",
+            (_json.dumps(snapshot, ensure_ascii=False), plan_id, user["id"]),
+        )
+    return templates.TemplateResponse(
+        request, "plans/_snapshot_result.html",
+        {"plan": plan, "taken_at": snapshot["taken_at"]},
+    )
+
+
+@router.get("/{plan_id}/compare")
+def compare_plan_vs_history(request: Request, user: CurrentUser, plan_id: int):
+    """保存済みスナップショットと現在の crop_history を並べて比較。"""
+    import json as _json
+
+    plan = _fetch_plan(user["id"], plan_id)
+    snapshot = None
+    if plan.get("metadata_json"):
+        try:
+            snapshot = _json.loads(plan["metadata_json"])
+        except _json.JSONDecodeError:
+            snapshot = None
+
+    actual_history: dict[tuple[str, str], str] = {}
+    if snapshot:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT f.field_code, h.year, h.crop FROM crop_history h "
+                "JOIN fields f ON h.field_id = f.id WHERE f.user_id = ?",
+                (user["id"],),
+            ).fetchall()
+        for r in rows:
+            actual_history[(r["field_code"], r["year"])] = r["crop"]
+
+    return templates.TemplateResponse(
+        request, "plans/compare.html",
+        {"user": user, "plan": plan, "snapshot": snapshot, "actual": actual_history},
+    )
 
 
 @router.post("/{plan_id}/apply-to-history", response_class=HTMLResponse)

@@ -1333,6 +1333,52 @@ def test_pesticide_record_form_uses_master_datalist(app_client):
     assert '<option value="過去B"></option>' in r.text
 
 
+def test_plan_snapshot_and_compare(app_client):
+    # ほ場 2 つ
+    _make_field(app_client, "CMP1")
+    _make_field(app_client, "CMP2")
+    # 計画
+    r = app_client.post("/plans/", data={"name": "C計画", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+
+    # 比較ページ - snapshot 無し
+    r = app_client.get(f"/plans/{pid}/compare")
+    assert r.status_code == 200
+    assert "スナップショットがありません" in r.text
+
+    # スナップショット保存
+    r = app_client.post(f"/plans/{pid}/snapshot")
+    assert r.status_code == 200
+    assert "スナップショットを保存しました" in r.text
+
+    # 比較ページ - snapshot あり、未実績で全部「未実績」
+    r = app_client.get(f"/plans/{pid}/compare")
+    assert r.status_code == 200
+    assert "スナップショット作成:" in r.text
+    assert "未実績" in r.text  # まだ R8/R9 の history がない
+
+    # apply-to-history で R8 を実績に反映
+    app_client.post(f"/plans/{pid}/apply-to-history", data={"year": "R8"})
+    r = app_client.get(f"/plans/{pid}/compare")
+    # R8 は計画通り反映されたので一致セル
+    assert "cell-match" in r.text
+
+
+def test_plan_compare_shows_diff(app_client):
+    fid = _make_field(app_client, "DIFF1")
+    r = app_client.post("/plans/", data={"name": "Diff", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    app_client.post(f"/plans/{pid}/snapshot")
+    # 履歴に違う作物を手動投入
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R8", "crop": "ぜったい違う作物"})
+    r = app_client.get(f"/plans/{pid}/compare")
+    # 差分セルが出る
+    assert "cell-diff" in r.text
+    assert "ぜったい違う作物" in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

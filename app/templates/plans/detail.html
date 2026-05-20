@@ -11,7 +11,18 @@
   <a href="/plans/{{ plan.id }}/result.csv">CSV</a>
   /
   <a href="/plans/{{ plan.id }}/result.pdf">PDF</a>
+  &nbsp;|&nbsp;
+  <a href="/plans/{{ plan.id }}/compare">計画 vs 実績</a>
 </p>
+
+<div class="snapshot-block">
+  <form hx-post="/plans/{{ plan.id }}/snapshot"
+        hx-target="#snapshot-result" hx-swap="innerHTML">
+    <button type="submit">スナップショット保存</button>
+    <small>現在の最適化結果を保存して、後から「計画 vs 実績」で比較できるようにします。</small>
+  </form>
+  <div id="snapshot-result"></div>
+</div>
 
 <div class="optimize-toolbar">
   <button hx-post="/plans/{{ plan.id }}/optimize"
