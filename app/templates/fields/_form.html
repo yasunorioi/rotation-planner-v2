@@ -8,7 +8,13 @@
       hx-on::after-request="this.reset()">
 {% endif %}
   <label>圃場コード <input name="field_code" required value="{{ field.field_code if field else '' }}"></label>
-  <label>地区 <input name="district" value="{{ field.district if field and field.district else '' }}"></label>
+  <label>地区
+    <input name="district" list="field-districts"
+           value="{{ field.district if field and field.district else '' }}">
+    <datalist id="field-districts">
+      {% for d in districts %}<option value="{{ d }}"></option>{% endfor %}
+    </datalist>
+  </label>
   <label>名称 <input name="name" value="{{ field.name if field and field.name else '' }}"></label>
   <label>面積(ha) <input name="area_ha" type="number" step="0.01" required value="{{ field.area_ha if field else '' }}"></label>
   <label><input name="beet_forbidden" type="checkbox" {% if field and field.beet_forbidden %}checked{% endif %}> てんさい禁忌</label>

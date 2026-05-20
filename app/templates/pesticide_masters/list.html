@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}農薬マスタ{% endblock %}
+{% block content %}
+<h2>農薬マスタ</h2>
+
+<div class="import-block">
+  <h3>CSV 取込/出力
+    <small>
+      <a href="/pesticide-masters/template.csv">テンプレート</a> |
+      <a href="/pesticide-masters/export.csv">エクスポート</a>
+    </small>
+  </h3>
+  <form hx-post="/pesticide-masters/import" hx-encoding="multipart/form-data"
+        hx-target="#pm-import-result" hx-swap="innerHTML">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">取込</button>
+  </form>
+  <div id="pm-import-result"></div>
+</div>
+
+<p class="hint">該当 {{ masters|length }} 件 | 防除記録の農薬名候補として使われます。</p>
+
+<table id="masters-table">
+  <thead>
+    <tr>
+      <th>農薬名</th><th>対象作物</th><th>希釈倍率</th><th>用途</th><th>使用時期</th><th>備考</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for master in masters %}
+      {% include "pesticide_masters/_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<div id="master-form-slot">
+  <button hx-get="/pesticide-masters/new" hx-target="#master-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+{% endblock %}

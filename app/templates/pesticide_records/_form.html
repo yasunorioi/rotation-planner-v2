@@ -15,7 +15,13 @@
       {% endfor %}
     </select>
   </label>
-  <label>農薬名 <input name="pesticide_name" required value="{{ record.pesticide_name if record else '' }}"></label>
+  <label>農薬名
+    <input name="pesticide_name" required list="pesticide-names"
+           value="{{ record.pesticide_name if record else '' }}">
+    <datalist id="pesticide-names">
+      {% for n in pesticide_names %}<option value="{{ n }}"></option>{% endfor %}
+    </datalist>
+  </label>
   <label>希釈倍率 <input name="dilution_rate" placeholder="1000倍" value="{{ record.dilution_rate if record and record.dilution_rate else '' }}"></label>
   <label>量 <input name="spray_amount" type="number" step="0.01" value="{{ record.spray_amount if record and record.spray_amount is not none else '' }}"></label>
   <label>単位 <input name="spray_unit" placeholder="L/10a" value="{{ record.spray_unit if record and record.spray_unit else '' }}"></label>

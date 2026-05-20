@@ -143,7 +143,11 @@ def list_fields(
 def new_field_form(request: Request, user: CurrentUser):
     return templates.TemplateResponse(
         request, "fields/_form.html",
-        {"field": None, "crops": _crop_suggestions(user["id"])},
+        {
+            "field": None,
+            "crops": _crop_suggestions(user["id"]),
+            "districts": _distinct_districts(user["id"]),
+        },
     )
 
 
@@ -176,7 +180,11 @@ def edit_field_form(request: Request, user: CurrentUser, field_id: int):
     field = _fetch_field(user["id"], field_id)
     return templates.TemplateResponse(
         request, "fields/_form.html",
-        {"field": field, "crops": _crop_suggestions(user["id"])},
+        {
+            "field": field,
+            "crops": _crop_suggestions(user["id"]),
+            "districts": _distinct_districts(user["id"]),
+        },
     )
 
 

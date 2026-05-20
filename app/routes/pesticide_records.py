@@ -89,6 +89,21 @@ def _user_fields(user_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _pesticide_name_suggestions(user_id: int) -> list[str]:
+    """防除記録の農薬名候補: pesticide_masters + このユーザの過去記録に登場した名前。"""
+    seen: dict[str, None] = {}
+    with connect() as conn:
+        for r in conn.execute("SELECT name FROM pesticide_masters ORDER BY name"):
+            seen.setdefault(r["name"], None)
+        for r in conn.execute(
+            "SELECT DISTINCT pesticide_name FROM pesticide_records "
+            "WHERE user_id = ? AND pesticide_name IS NOT NULL AND pesticide_name != ''",
+            (user_id,),
+        ):
+            seen.setdefault(r["pesticide_name"], None)
+    return list(seen.keys())
+
+
 def _ensure_field_owned(conn, user_id: int, field_id: int) -> None:
     row = conn.execute(
         "SELECT 1 FROM fields WHERE id = ? AND user_id = ?", (field_id, user_id)
@@ -124,7 +139,11 @@ def list_records(
 def new_form(request: Request, user: CurrentUser):
     fields = _user_fields(user["id"])
     return templates.TemplateResponse(
-        request, "pesticide_records/_form.html", {"record": None, "fields": fields}
+        request, "pesticide_records/_form.html",
+        {
+            "record": None, "fields": fields,
+            "pesticide_names": _pesticide_name_suggestions(user["id"]),
+        },
     )
 
 
@@ -322,7 +341,11 @@ def edit_form(request: Request, user: CurrentUser, rec_id: int):
     record = _fetch_record(user["id"], rec_id)
     fields = _user_fields(user["id"])
     return templates.TemplateResponse(
-        request, "pesticide_records/_form.html", {"record": record, "fields": fields}
+        request, "pesticide_records/_form.html",
+        {
+            "record": record, "fields": fields,
+            "pesticide_names": _pesticide_name_suggestions(user["id"]),
+        },
     )
 
 

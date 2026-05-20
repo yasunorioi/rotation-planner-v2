@@ -1,0 +1,20 @@
+{% if master %}
+<form hx-put="/pesticide-masters/{{ master.id }}"
+      hx-target="#master-{{ master.id }}" hx-swap="outerHTML"
+      hx-on::after-request="this.closest('#master-form-slot').innerHTML = '<button hx-get=&quot;/pesticide-masters/new&quot; hx-target=&quot;#master-form-slot&quot; hx-swap=&quot;innerHTML&quot;>＋ 新規追加</button>'; htmx.process(this.closest('#master-form-slot'))">
+{% else %}
+<form hx-post="/pesticide-masters/"
+      hx-target="#masters-table tbody" hx-swap="beforeend"
+      hx-on::after-request="this.reset()">
+{% endif %}
+  <label>農薬名 <input name="name" required value="{{ master.name if master else '' }}"></label>
+  <label>対象作物 <input name="crop" value="{{ master.crop if master and master.crop else '' }}"></label>
+  <label>希釈倍率 <input name="dilution_rate" placeholder="1000倍" value="{{ master.dilution_rate if master and master.dilution_rate else '' }}"></label>
+  <label>用途 <input name="application_method" placeholder="殺菌 / 除草 など" value="{{ master.application_method if master and master.application_method else '' }}"></label>
+  <label>使用時期 <input name="usage_timing" placeholder="5月 / 開花期 など" value="{{ master.usage_timing if master and master.usage_timing else '' }}"></label>
+  <label>備考 <input name="notes" value="{{ master.notes if master and master.notes else '' }}"></label>
+  <button type="submit">{{ "更新" if master else "追加" }}</button>
+  <button type="button"
+          hx-get="/pesticide-masters/" hx-target="#master-form-slot" hx-select="#master-form-slot"
+          hx-swap="outerHTML">キャンセル</button>
+</form>

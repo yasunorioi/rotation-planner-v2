@@ -1247,6 +1247,92 @@ def test_optimizer_overrides_with_fixed_crop(app_client):
     assert row.count("牧草") >= 2  # R8 + R9
 
 
+def test_field_form_district_datalist(app_client):
+    # 地区A と 地区B のほ場を作る
+    app_client.post("/fields/", data={
+        "field_code": "DA1", "district": "地区A", "area_ha": "1.0",
+    })
+    app_client.post("/fields/", data={
+        "field_code": "DA2", "district": "地区B", "area_ha": "1.0",
+    })
+    # 新規 form に datalist に両地区が出る
+    r = app_client.get("/fields/new")
+    assert r.status_code == 200
+    assert 'list="field-districts"' in r.text
+    assert '<datalist id="field-districts">' in r.text
+    assert '<option value="地区A"></option>' in r.text
+    assert '<option value="地区B"></option>' in r.text
+
+
+def test_pesticide_master_crud(app_client):
+    # 空の状態
+    r = app_client.get("/pesticide-masters/")
+    assert r.status_code == 200
+    assert "農薬マスタ" in r.text
+
+    # 新規
+    r = app_client.post(
+        "/pesticide-masters/",
+        data={"name": "ベンレート", "crop": "てんさい", "dilution_rate": "1000倍",
+              "application_method": "殺菌", "usage_timing": "5月", "notes": "テスト"},
+    )
+    assert r.status_code == 200
+    assert "ベンレート" in r.text and "てんさい" in r.text
+    import re
+    mid = int(re.search(r'id="master-(\d+)"', r.text).group(1))
+
+    # 編集
+    r = app_client.put(
+        f"/pesticide-masters/{mid}",
+        data={"name": "ベンレート(改)", "crop": "だいず", "dilution_rate": "2000倍",
+              "application_method": "殺菌", "usage_timing": "6月", "notes": ""},
+    )
+    assert "ベンレート(改)" in r.text and "だいず" in r.text
+
+    # 削除
+    assert app_client.delete(f"/pesticide-masters/{mid}").status_code == 200
+    r = app_client.get("/pesticide-masters/")
+    assert "ベンレート" not in r.text
+
+
+def test_pesticide_master_csv_import(app_client):
+    csv_in = (
+        "農薬名,対象作物,希釈倍率,用途,使用時期,備考\n"
+        "M1,てんさい,1000倍,殺菌,5月,メモ1\n"
+        "M2,だいず,500倍,除草,4月,\n"
+    )
+    r = app_client.post(
+        "/pesticide-masters/import",
+        files={"file": ("m.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 200
+    assert "追加 2" in r.text
+    # 再インポートで更新
+    r = app_client.post(
+        "/pesticide-masters/import",
+        files={"file": ("m.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert "更新 2" in r.text
+
+
+def test_pesticide_record_form_uses_master_datalist(app_client):
+    _make_field(app_client, "PF1")
+    app_client.post("/pesticide-masters/", data={
+        "name": "マスタA", "crop": "", "dilution_rate": "",
+        "application_method": "", "usage_timing": "", "notes": "",
+    })
+    # 過去の防除記録にあった農薬名も候補に出る
+    fid = _make_field(app_client, "PF2")
+    app_client.post("/pesticide-records/", data={
+        "field_id": fid, "spray_date": "2026-05-10", "pesticide_name": "過去B",
+        "dilution_rate": "", "spray_amount": "", "spray_unit": "", "notes": "",
+    })
+    r = app_client.get("/pesticide-records/new")
+    assert 'list="pesticide-names"' in r.text
+    assert '<option value="マスタA"></option>' in r.text
+    assert '<option value="過去B"></option>' in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

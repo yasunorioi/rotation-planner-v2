@@ -1,0 +1,15 @@
+<tr id="master-{{ master.id }}">
+  <td>{{ master.name }}</td>
+  <td>{{ master.crop or "" }}</td>
+  <td>{{ master.dilution_rate or "" }}</td>
+  <td>{{ master.application_method or "" }}</td>
+  <td>{{ master.usage_timing or "" }}</td>
+  <td>{{ master.notes or "" }}</td>
+  <td>
+    <button hx-get="/pesticide-masters/{{ master.id }}/edit"
+            hx-target="#master-form-slot" hx-swap="innerHTML">編集</button>
+    <button hx-delete="/pesticide-masters/{{ master.id }}"
+            hx-target="#master-{{ master.id }}" hx-swap="outerHTML"
+            hx-confirm="削除しますか？">削除</button>
+  </td>
+</tr>
