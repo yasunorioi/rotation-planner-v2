@@ -37,14 +37,16 @@ _FIELD_COLS = (
 
 
 def _crop_suggestions(user_id: int) -> list[str]:
-    """fields の form で使う作物候補。history と同じ集合。"""
-    from rotation_planner.app import DEFAULT_CONSTRAINTS
+    """fields の form で使う作物候補。history と同じ集合 (crop_master 一次)。"""
     import json as _json
 
     seen: dict[str, None] = {}
-    for c in DEFAULT_CONSTRAINTS.keys():
-        seen.setdefault(c, None)
     with connect() as conn:
+        for r in conn.execute(
+            "SELECT name FROM crop_master WHERE is_active = 1 "
+            "ORDER BY display_order, name"
+        ):
+            seen.setdefault(r["name"], None)
         for r in conn.execute(
             "SELECT DISTINCT h.crop FROM crop_history h "
             "JOIN fields f ON h.field_id = f.id "

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import configure_db
 from app.routes import (
-    aggregation, dashboard, fields, history,
+    aggregation, crop_masters, dashboard, fields, history,
     pesticide_masters, pesticide_records, plans,
 )
 
@@ -26,6 +26,7 @@ app.include_router(dashboard.router)
 app.include_router(fields.router)
 app.include_router(history.router)
 app.include_router(plans.router)
+app.include_router(crop_masters.router)
 app.include_router(pesticide_masters.router)
 app.include_router(pesticide_records.router)
 app.include_router(aggregation.router)

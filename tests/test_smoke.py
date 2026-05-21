@@ -1414,6 +1414,71 @@ def test_field_detail_404_for_other_user(app_client):
     assert app_client.get(f"/fields/{fid}/detail").status_code == 404
 
 
+def test_crop_master_seeded_on_fresh_db(app_client):
+    # 新規 DB はスキーマで seed 済み (db_schema.sql 内の INSERT OR IGNORE)
+    r = app_client.get("/crop-masters/")
+    assert r.status_code == 200
+    # 主要作物が出る
+    for crop in ["小麦(春播)", "だいず", "てんさい", "ばれいしょ"]:
+        assert crop in r.text
+
+
+def test_crop_master_crud(app_client):
+    # 新規
+    r = app_client.post(
+        "/crop-masters/",
+        data={"name": "そば", "category": "穀物", "family": "タデ科",
+              "display_order": "20", "is_active": "on"},
+    )
+    assert r.status_code == 200
+    assert "そば" in r.text and "タデ科" in r.text
+    import re
+    cid = int(re.search(r'id="crop-(\d+)"', r.text).group(1))
+
+    # 編集
+    r = app_client.put(
+        f"/crop-masters/{cid}",
+        data={"name": "そば(改)", "category": "雑穀", "family": "タデ科",
+              "display_order": "21", "is_active": "on"},
+    )
+    assert "そば(改)" in r.text and "雑穀" in r.text
+
+    # 削除
+    assert app_client.delete(f"/crop-masters/{cid}").status_code == 200
+
+
+def test_crop_master_inactive_excluded_from_datalist(app_client):
+    fid = _make_field(app_client, "DM1")
+    # 「あさつき」を crop_master に inactive で追加
+    r = app_client.post(
+        "/crop-masters/",
+        data={"name": "あさつき", "category": "野菜", "family": "ユリ科",
+              "display_order": "30"},  # is_active なし → 0
+    )
+    assert r.status_code == 200
+    # history cell edit に出てこない
+    r = app_client.get(f"/history/cell/edit?field_id={fid}&year=R7")
+    assert '<option value="あさつき"></option>' not in r.text
+    # アクティブな作物は出る
+    assert '<option value="てんさい"></option>' in r.text
+
+
+def test_crop_master_csv_import(app_client):
+    csv_in = (
+        "作物名,分類,科,display_order,is_active\n"
+        "ライ麦,穀物,イネ科,15,1\n"
+        "オーツ麦,穀物,イネ科,16,0\n"
+    )
+    r = app_client.post(
+        "/crop-masters/import",
+        files={"file": ("c.csv", csv_in.encode("utf-8-sig"), "text/csv")},
+    )
+    assert r.status_code == 200
+    assert "追加 2" in r.text
+    r = app_client.get("/crop-masters/")
+    assert "ライ麦" in r.text and "オーツ麦" in r.text
+
+
 def test_polygon_404_for_other_user_field(app_client):
     fid = _create_field(app_client)
     # 別ユーザー作る

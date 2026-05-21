@@ -1,0 +1,19 @@
+{% if crop %}
+<form hx-put="/crop-masters/{{ crop.id }}"
+      hx-target="#crop-{{ crop.id }}" hx-swap="outerHTML"
+      hx-on::after-request="this.closest('#crop-form-slot').innerHTML = '<button hx-get=&quot;/crop-masters/new&quot; hx-target=&quot;#crop-form-slot&quot; hx-swap=&quot;innerHTML&quot;>＋ 新規追加</button>'; htmx.process(this.closest('#crop-form-slot'))">
+{% else %}
+<form hx-post="/crop-masters/"
+      hx-target="#crops-table tbody" hx-swap="beforeend"
+      hx-on::after-request="this.reset()">
+{% endif %}
+  <label>作物名 <input name="name" required value="{{ crop.name if crop else '' }}"></label>
+  <label>分類 <input name="category" placeholder="穀物/野菜/根菜 等" value="{{ crop.category if crop and crop.category else '' }}"></label>
+  <label>科 <input name="family" placeholder="イネ科/アカザ科 等" value="{{ crop.family if crop and crop.family else '' }}"></label>
+  <label>順序 <input name="display_order" type="number" min="0" value="{{ crop.display_order if crop else 100 }}"></label>
+  <label><input name="is_active" type="checkbox" {% if not crop or crop.is_active %}checked{% endif %}> 有効</label>
+  <button type="submit">{{ "更新" if crop else "追加" }}</button>
+  <button type="button"
+          hx-get="/crop-masters/" hx-target="#crop-form-slot" hx-select="#crop-form-slot"
+          hx-swap="outerHTML">キャンセル</button>
+</form>

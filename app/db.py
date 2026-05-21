@@ -27,14 +27,23 @@ def _migrate(db_path: Path) -> None:
     """既存 DB に対する手動マイグレーション。
     Why: SQLite は ADD COLUMN IF NOT EXISTS を持たないため、
     db_schema.sql に列追加した時は PRAGMA で確認して個別に ALTER する。
+    新規テーブル + seed は db_schema.sql の CREATE/INSERT OR IGNORE
+    そのままで idempotent なので、最後に schema を流して追従させる。
     """
     if not db_path.exists():
         return  # 新規 DB はスキーマがそのまま反映される
     conn = sqlite3.connect(str(db_path))
     try:
+        # 列追加 (idempotent ではないので個別チェック)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(fields)")}
         if cols and "fixed_crop" not in cols:
             conn.execute("ALTER TABLE fields ADD COLUMN fixed_crop TEXT")
+            conn.commit()
+        # 新規テーブル + seed は schema を流す (CREATE TABLE IF NOT EXISTS と
+        # INSERT OR IGNORE で構成されているので idempotent)
+        schema = Path(__file__).resolve().parent.parent / "db_schema.sql"
+        if schema.exists():
+            conn.executescript(schema.read_text(encoding="utf-8"))
             conn.commit()
     finally:
         conn.close()

@@ -1,0 +1,14 @@
+<tr id="crop-{{ crop.id }}" {% if not crop.is_active %}class="row-inactive"{% endif %}>
+  <td>{{ crop.display_order }}</td>
+  <td>{{ crop.name }}</td>
+  <td>{{ crop.category or "" }}</td>
+  <td>{{ crop.family or "" }}</td>
+  <td>{{ "✓" if crop.is_active else "—" }}</td>
+  <td>
+    <button hx-get="/crop-masters/{{ crop.id }}/edit"
+            hx-target="#crop-form-slot" hx-swap="innerHTML">編集</button>
+    <button hx-delete="/crop-masters/{{ crop.id }}"
+            hx-target="#crop-{{ crop.id }}" hx-swap="outerHTML"
+            hx-confirm="削除しますか？">削除</button>
+  </td>
+</tr>

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}作物マスタ{% endblock %}
+{% block content %}
+<h2>作物マスタ</h2>
+
+<div class="import-block">
+  <h3>CSV 取込/出力
+    <small>
+      <a href="/crop-masters/template.csv">テンプレート</a> |
+      <a href="/crop-masters/export.csv">エクスポート</a>
+    </small>
+  </h3>
+  <form hx-post="/crop-masters/import" hx-encoding="multipart/form-data"
+        hx-target="#cm-import-result" hx-swap="innerHTML">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">取込</button>
+  </form>
+  <div id="cm-import-result"></div>
+</div>
+
+<p class="hint">該当 {{ crops|length }} 件 | 作付履歴・圃場フォーム・計画制約の datalist に使われます。</p>
+
+<table id="crops-table">
+  <thead>
+    <tr>
+      <th>順序</th><th>作物名</th><th>分類</th><th>科</th><th>有効</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for crop in crops %}
+      {% include "crop_masters/_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<div id="crop-form-slot">
+  <button hx-get="/crop-masters/new" hx-target="#crop-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+{% endblock %}

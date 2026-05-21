@@ -1,0 +1,10 @@
+<div class="import-result">
+  <p class="result-msg">{{ summary }}</p>
+  {% if errors %}
+  <details>
+    <summary>エラー詳細</summary>
+    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  <p><a href="/crop-masters/">→ 作物マスタを再読込</a></p>
+</div>

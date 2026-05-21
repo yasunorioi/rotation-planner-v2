@@ -44,15 +44,20 @@ def _ensure_field_owned(conn, user_id: int, field_id: int) -> None:
 
 
 def _crop_suggestions(user_id: int) -> list[str]:
-    """作物候補リスト: DEFAULT_CONSTRAINTS + 既存履歴 + ユーザの計画 constraints。"""
-    from rotation_planner.app import DEFAULT_CONSTRAINTS
+    """作物候補リスト。
+    一次: crop_master (is_active=1, display_order 順)
+    二次: ユーザの履歴に登場した作物 (マスタにないもの)
+    三次: ユーザの計画 constraints に登場した作物 (マスタにないもの)
+    """
     import json as _json
 
-    seen: dict[str, None] = {}  # 順序保持の set 代用
-    for c in DEFAULT_CONSTRAINTS.keys():
-        seen.setdefault(c, None)
+    seen: dict[str, None] = {}
     with connect() as conn:
-        # ユーザの履歴に登場した作物
+        for r in conn.execute(
+            "SELECT name FROM crop_master WHERE is_active = 1 "
+            "ORDER BY display_order, name"
+        ):
+            seen.setdefault(r["name"], None)
         for r in conn.execute(
             "SELECT DISTINCT h.crop FROM crop_history h "
             "JOIN fields f ON h.field_id = f.id "
@@ -61,7 +66,6 @@ def _crop_suggestions(user_id: int) -> list[str]:
         ):
             if r["crop"]:
                 seen.setdefault(r["crop"], None)
-        # ユーザの計画 constraints から作物名抽出
         for r in conn.execute(
             "SELECT constraints_json FROM rotation_plans "
             "WHERE user_id = ? AND constraints_json IS NOT NULL",

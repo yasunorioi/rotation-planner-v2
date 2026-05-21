@@ -145,3 +145,4 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .detail-meta td { background: #fff; }
 .field-history-table, .field-records-table { background: #fff; margin-bottom: 1.5rem; }
 .field-history-table small, .field-records-table small { color: #888; }
+.row-inactive td { color: #aaa; background: #f8f8f8; }
