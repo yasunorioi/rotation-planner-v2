@@ -14,6 +14,30 @@ def test_dashboard(app_client):
     assert "テストユーザー" in r.text
 
 
+def test_dashboard_recent_activity(app_client):
+    fid = _make_field(app_client, "DASH1")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "だいず"})
+    app_client.post("/pesticide-records/", data={
+        "field_id": fid, "spray_date": "2026-05-10", "pesticide_name": "Dash薬",
+        "dilution_rate": "", "spray_amount": "", "spray_unit": "", "notes": "",
+    })
+    app_client.post("/plans/", data={"name": "DashPlan", "start_year": "R8", "end_year": "R9"})
+    r = app_client.get("/")
+    assert "最近編集したほ場" in r.text
+    assert "DASH1" in r.text
+    assert "DashPlan" in r.text
+    assert "Dash薬" in r.text
+
+
+def test_dashboard_action_suggestions(app_client):
+    # ポリゴン無し + 履歴空 のほ場を作る → アクション提案に出る
+    _make_field(app_client, "NOAH1")
+    r = app_client.get("/")
+    assert "次のアクション" in r.text
+    assert "ポリゴン未登録のほ場" in r.text
+    assert "作付履歴ゼロのほ場" in r.text
+
+
 def test_fields_empty_then_create_edit_delete(app_client):
     # 初期状態
     r = app_client.get("/fields/")
@@ -1355,7 +1379,7 @@ def test_plan_snapshot_and_compare(app_client):
     # 比較ページ - snapshot あり、未実績で全部「未実績」
     r = app_client.get(f"/plans/{pid}/compare")
     assert r.status_code == 200
-    assert "スナップショット作成:" in r.text
+    assert "スナップショット" in r.text
     assert "未実績" in r.text  # まだ R8/R9 の history がない
 
     # apply-to-history で R8 を実績に反映
@@ -1363,6 +1387,21 @@ def test_plan_snapshot_and_compare(app_client):
     r = app_client.get(f"/plans/{pid}/compare")
     # R8 は計画通り反映されたので一致セル
     assert "cell-match" in r.text
+
+
+def test_compare_pdf_export(app_client):
+    fid = _make_field(app_client, "CPDF1")
+    r = app_client.post("/plans/", data={"name": "CPDF", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # snapshot 無いと 404
+    r = app_client.get(f"/plans/{pid}/compare.pdf")
+    assert r.status_code == 404
+    # snapshot 取って PDF
+    app_client.post(f"/plans/{pid}/snapshot")
+    r = app_client.get(f"/plans/{pid}/compare.pdf")
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF-")
 
 
 def test_plan_compare_shows_diff(app_client):
@@ -1477,6 +1516,100 @@ def test_crop_master_csv_import(app_client):
     assert "追加 2" in r.text
     r = app_client.get("/crop-masters/")
     assert "ライ麦" in r.text and "オーツ麦" in r.text
+
+
+def test_backup_page(app_client):
+    r = app_client.get("/backup/")
+    assert r.status_code == 200
+    assert "データバックアップ" in r.text
+
+
+def test_backup_download(app_client):
+    _make_field(app_client, "BK1")
+    r = app_client.get("/backup/download")
+    assert r.status_code == 200
+    # SQLite ファイルマジック
+    assert r.content.startswith(b"SQLite format 3\x00")
+    assert "filename=" in r.headers.get("content-disposition", "")
+    # 別の sqlite3 接続で開けることを確認
+    import tempfile, sqlite3
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        tmp.write(r.content)
+        path = tmp.name
+    conn = sqlite3.connect(path)
+    row = conn.execute("SELECT COUNT(*) FROM fields WHERE field_code = 'BK1'").fetchone()
+    assert row[0] == 1
+    conn.close()
+
+
+def test_rotation_check_detects_consecutive(app_client):
+    fid = _make_field(app_client, "RC1")
+    # アカザ科を連作 (てんさい R6, R7)
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "てんさい"})
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "てんさい"})
+    r = app_client.get("/rotation-check/")
+    assert r.status_code == 200
+    assert "連作" in r.text
+    # 連作セクションに RC1 が出る
+    import re
+    consec_section = re.search(r"連作.*?</section>", r.text, re.DOTALL).group(0)
+    assert "RC1" in consec_section
+    assert "アカザ科" in consec_section
+
+
+def test_rotation_check_detects_short_repeat(app_client):
+    fid = _make_field(app_client, "RC2")
+    # てんさい R5, R7 (gap=2, threshold=4 → 短期判定)
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R5", "crop": "てんさい"})
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "てんさい"})
+    r = app_client.get("/rotation-check/?gap=4")
+    import re
+    # 🟡 アイコン付きの h3 から </section> までを抽出 (intro 文との混同を避ける)
+    short = re.search(r"🟡 短期再作付.*?</section>", r.text, re.DOTALL).group(0)
+    assert "RC2" in short
+    assert "2 年" in short
+
+
+def test_rotation_check_unclassified(app_client):
+    fid = _make_field(app_client, "RC3")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "未知の作物"})
+    r = app_client.get("/rotation-check/")
+    assert "科分類未設定の作物" in r.text
+    assert "未知の作物" in r.text
+
+
+def test_plan_multiple_snapshots(app_client):
+    fid = _make_field(app_client, "MS1")
+    r = app_client.post("/plans/", data={"name": "MS", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 2回 snapshot
+    app_client.post(f"/plans/{pid}/snapshot", data={"label": "v1"})
+    app_client.post(f"/plans/{pid}/snapshot", data={"label": "v2"})
+    # 履歴ページ
+    r = app_client.get(f"/plans/{pid}/snapshots")
+    assert r.status_code == 200
+    assert "v1" in r.text and "v2" in r.text
+    # 履歴に 2 行
+    all_rows = re.findall(r'<tr id="snapshot-(\d+)">(.*?)</tr>', r.text, re.DOTALL)
+    assert len(all_rows) == 2
+    # v1 のラベルがある行の id を抽出 (row 単位で走査)
+    s1_id = None
+    for rid, content in all_rows:
+        if "<td>v1</td>" in content:
+            s1_id = int(rid)
+            break
+    assert s1_id is not None
+    # 個別比較
+    r = app_client.get(f"/plans/{pid}/compare?snap_id={s1_id}")
+    assert r.status_code == 200
+    assert "v1" in r.text or "スナップショット" in r.text
+    # 削除
+    r = app_client.delete(f"/plans/{pid}/snapshots/{s1_id}")
+    assert r.status_code == 200
+    r = app_client.get(f"/plans/{pid}/snapshots")
+    assert "v1" not in r.text
+    assert "v2" in r.text
 
 
 def test_polygon_404_for_other_user_field(app_client):

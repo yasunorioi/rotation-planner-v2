@@ -7,7 +7,14 @@
 {% if not snapshot %}
 <p class="hint">この計画にはまだスナップショットがありません。計画詳細から「スナップショット保存」を押してください。</p>
 {% else %}
-<p>スナップショット作成: {{ snapshot.taken_at }} (スコア {{ "%.1f"|format(snapshot.score) if snapshot.score is not none else "-" }})</p>
+<p>
+  スナップショット {% if snapshot.label %}「{{ snapshot.label }}」{% endif %}: {{ snapshot.taken_at }}
+  (スコア {{ "%.1f"|format(snapshot.score) if snapshot.score is not none else "-" }})
+  &nbsp;|&nbsp;
+  <a href="/plans/{{ plan.id }}/compare.pdf?snap_id={{ snapshot.id }}">PDF</a>
+  &nbsp;|&nbsp;
+  <a href="/plans/{{ plan.id }}/snapshots">他のスナップショット</a>
+</p>
 
 <table class="compare-table">
   <thead>

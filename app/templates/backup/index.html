@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}バックアップ{% endblock %}
+{% block content %}
+<h2>データバックアップ</h2>
+
+<p>SQLite DB ファイルをそのままダウンロードします。
+   定期的にローカルに保存しておけば、データの完全な復元が可能です。</p>
+
+<p>
+  <a href="/backup/download" class="download-btn">DB バックアップを取得</a>
+</p>
+
+<h3>復元方法</h3>
+<p>ダウンロードした <code>*.db</code> ファイルを
+   <code>~/rotation-planner-v2/data/rotation_planner.db</code> に置き換えて
+   サーバを再起動するだけです。</p>
+
+<h3>関連ダウンロード</h3>
+<ul>
+  <li><a href="/fields/export.csv">ほ場 + 履歴 CSV</a></li>
+  <li><a href="/fields/polygons.geojson">ほ場ポリゴン GeoJSON</a></li>
+  <li><a href="/fields/polygons.kmz">ほ場ポリゴン KMZ</a></li>
+  <li><a href="/pesticide-records/export.csv">防除記録 CSV</a></li>
+  <li><a href="/pesticide-masters/export.csv">農薬マスタ CSV</a></li>
+  <li><a href="/crop-masters/export.csv">作物マスタ CSV</a></li>
+</ul>
+{% endblock %}

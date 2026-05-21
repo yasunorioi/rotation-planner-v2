@@ -202,8 +202,11 @@ async def remove_constraint_crop(
 
 
 @router.post("/{plan_id}/snapshot", response_class=HTMLResponse)
-def snapshot_plan(request: Request, user: CurrentUser, plan_id: int):
-    """現在の計画結果をスナップショットとして metadata_json に保存。"""
+def snapshot_plan(
+    request: Request, user: CurrentUser, plan_id: int,
+    label: str = Form(""),
+):
+    """現在の計画結果を plan_snapshots テーブルに追加。"""
     from datetime import datetime as _dt
     import json as _json
     from app.optimizer_service import run_optimization_for_plan
@@ -213,40 +216,130 @@ def snapshot_plan(request: Request, user: CurrentUser, plan_id: int):
     if not result.get("ok"):
         raise HTTPException(400, result.get("message", "最適化失敗"))
 
-    # grid のキーは tuple なので、JSON 化のため文字列キーへ変換
     serializable_grid = {f"{code}|{y}": crop for (code, y), crop in result["grid"].items()}
-    snapshot = {
-        "taken_at": _dt.now().isoformat(timespec="seconds"),
-        "score": result.get("score"),
+    data = {
         "past_years": result["past_years"],
         "future_years": result["future_years"],
         "field_codes": result["field_codes"],
         "grid": serializable_grid,
     }
+    taken_at = _dt.now().isoformat(timespec="seconds")
     with connect() as conn:
         conn.execute(
-            "UPDATE rotation_plans SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP "
-            "WHERE id = ? AND user_id = ?",
-            (_json.dumps(snapshot, ensure_ascii=False), plan_id, user["id"]),
+            "INSERT INTO plan_snapshots (plan_id, taken_at, score, data_json, label) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (plan_id, taken_at, result.get("score"),
+             _json.dumps(data, ensure_ascii=False), label.strip() or None),
         )
     return templates.TemplateResponse(
         request, "plans/_snapshot_result.html",
-        {"plan": plan, "taken_at": snapshot["taken_at"]},
+        {"plan": plan, "taken_at": taken_at},
+    )
+
+
+@router.get("/{plan_id}/snapshots")
+def list_snapshots(request: Request, user: CurrentUser, plan_id: int):
+    plan = _fetch_plan(user["id"], plan_id)
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id, taken_at, score, label FROM plan_snapshots "
+            "WHERE plan_id = ? ORDER BY taken_at DESC, id DESC",
+            (plan_id,),
+        ).fetchall()
+    snapshots = [dict(r) for r in rows]
+    return templates.TemplateResponse(
+        request, "plans/snapshots.html",
+        {"user": user, "plan": plan, "snapshots": snapshots},
+    )
+
+
+@router.delete("/{plan_id}/snapshots/{snap_id}")
+def delete_snapshot(user: CurrentUser, plan_id: int, snap_id: int):
+    _fetch_plan(user["id"], plan_id)  # 権限チェック
+    with connect() as conn:
+        result = conn.execute(
+            "DELETE FROM plan_snapshots WHERE id = ? AND plan_id = ?",
+            (snap_id, plan_id),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "スナップショットが見つかりません")
+    return Response(status_code=200)
+
+
+def _load_snapshot(plan_id: int, snap_id: int | None) -> dict | None:
+    """plan_snapshots からスナップショットを読む。snap_id=None なら最新を返す。"""
+    import json as _json
+
+    with connect() as conn:
+        if snap_id is not None:
+            row = conn.execute(
+                "SELECT id, taken_at, score, label, data_json FROM plan_snapshots "
+                "WHERE id = ? AND plan_id = ?",
+                (snap_id, plan_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id, taken_at, score, label, data_json FROM plan_snapshots "
+                "WHERE plan_id = ? ORDER BY taken_at DESC, id DESC LIMIT 1",
+                (plan_id,),
+            ).fetchone()
+    if row is None:
+        return None
+    try:
+        data = _json.loads(row["data_json"])
+    except _json.JSONDecodeError:
+        return None
+    # snapshot dict (古い metadata_json と同じ shape) を組み立て
+    return {
+        "id": row["id"],
+        "taken_at": row["taken_at"],
+        "score": row["score"],
+        "label": row["label"],
+        "past_years": data.get("past_years", []),
+        "future_years": data.get("future_years", []),
+        "field_codes": data.get("field_codes", []),
+        "grid": data.get("grid", {}),
+    }
+
+
+@router.get("/{plan_id}/compare.pdf")
+def compare_plan_pdf(
+    user: CurrentUser, plan_id: int,
+    snap_id: int | None = None,
+):
+    from app.pdf_service import generate_compare_pdf
+
+    plan = _fetch_plan(user["id"], plan_id)
+    snapshot = _load_snapshot(plan_id, snap_id)
+    if snapshot is None:
+        raise HTTPException(404, "この計画にはスナップショットがありません")
+
+    actual: dict[tuple[str, str], str] = {}
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT f.field_code, h.year, h.crop FROM crop_history h "
+            "JOIN fields f ON h.field_id = f.id WHERE f.user_id = ?",
+            (user["id"],),
+        ).fetchall()
+    for r in rows:
+        actual[(r["field_code"], r["year"])] = r["crop"]
+
+    pdf_bytes = generate_compare_pdf(plan, snapshot, actual)
+    return Response(
+        pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="plan_{plan_id}_compare.pdf"'},
     )
 
 
 @router.get("/{plan_id}/compare")
-def compare_plan_vs_history(request: Request, user: CurrentUser, plan_id: int):
-    """保存済みスナップショットと現在の crop_history を並べて比較。"""
-    import json as _json
-
+def compare_plan_vs_history(
+    request: Request, user: CurrentUser, plan_id: int,
+    snap_id: int | None = None,
+):
+    """指定スナップショットと現在の crop_history を並べて比較 (snap_id 省略時は最新)。"""
     plan = _fetch_plan(user["id"], plan_id)
-    snapshot = None
-    if plan.get("metadata_json"):
-        try:
-            snapshot = _json.loads(plan["metadata_json"])
-        except _json.JSONDecodeError:
-            snapshot = None
+    snapshot = _load_snapshot(plan_id, snap_id)
 
     actual_history: dict[tuple[str, str], str] = {}
     if snapshot:

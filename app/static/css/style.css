@@ -146,3 +146,24 @@ form button { grid-column: auto; padding: 0.5rem 1rem; }
 .field-history-table, .field-records-table { background: #fff; margin-bottom: 1.5rem; }
 .field-history-table small, .field-records-table small { color: #888; }
 .row-inactive td { color: #aaa; background: #f8f8f8; }
+
+a.stat { text-decoration: none; color: inherit; transition: background 0.1s; }
+a.stat:hover { background: #f0f8f5; }
+.actions { list-style: none; padding: 0; background: #fff5f5; border-left: 4px solid #f0ad4e; padding: 0.5rem 1rem; }
+.actions li { padding: 0.25rem 0; }
+.actions a { color: #d97706; font-weight: 600; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.dashboard-grid section { background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; padding: 1rem; }
+.dashboard-grid h3 { margin-top: 0; font-size: 1rem; }
+.recent-list { list-style: none; padding: 0; margin: 0; }
+.recent-list li { padding: 0.4rem 0; border-bottom: 1px solid #eee; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.recent-list li:last-child { border-bottom: 0; }
+.recent-list small { color: #888; margin-left: auto; font-size: 0.75rem; }
+.download-btn { display: inline-block; padding: 0.6rem 1.5rem; background: #2d6a4f; color: #fff; border-radius: 4px; text-decoration: none; }
+.download-btn:hover { background: #1f4d36; }
+.check-table { background: #fff; margin-bottom: 1.5rem; }
+.check-table th { background: #eef; }
+.family-tag { background: #fef3c7; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.85rem; }
+.snapshots-table { background: #fff; }
+.snapshots-table th { background: #eef; }
+.snapshots-table button { background: none; color: #b91c1c; border: 1px solid #f5b5b5; padding: 0.2rem 0.5rem; }

@@ -184,6 +184,81 @@ def generate_plan_pdf(plan: dict, result: dict) -> bytes:
     return buf.getvalue()
 
 
+def generate_compare_pdf(plan: dict, snapshot: dict, actual: dict, title: str | None = None) -> bytes:
+    """計画スナップショット vs 実績の比較 PDF。
+    actual は dict[(field_code, year)] -> crop。snapshot["grid"] は "code|year" 文字列キー。"""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
+    font = _ensure_font()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+    )
+    years = snapshot["past_years"] + snapshot["future_years"]
+    header = ["圃場"] + years
+    rows = [header]
+    diff_count = 0
+    match_count = 0
+    for code in snapshot["field_codes"]:
+        row = [code]
+        for y in years:
+            planned = snapshot["grid"].get(f"{code}|{y}", "")
+            act = actual.get((code, y), "")
+            if planned and act:
+                if planned == act:
+                    row.append(act)
+                    match_count += 1
+                else:
+                    row.append(f"{planned}→{act}")
+                    diff_count += 1
+            elif planned:
+                row.append(f"({planned})")
+            elif act:
+                row.append(f"[{act}]")
+            else:
+                row.append("—")
+        rows.append(row)
+
+    col_widths = [25 * mm] + [22 * mm] * len(years)
+    table = Table(rows, colWidths=col_widths, repeatRows=1)
+    # セル個別色: 一致=緑, 差分=黄, 計画のみ=青, 実績のみ=灰
+    style_cmds = [
+        ("FONTNAME", (0, 0), (-1, -1), font),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef")),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+    ]
+    for ri, code in enumerate(snapshot["field_codes"], start=1):
+        for ci, y in enumerate(years, start=1):
+            planned = snapshot["grid"].get(f"{code}|{y}", "")
+            act = actual.get((code, y), "")
+            if planned and act:
+                if planned == act:
+                    style_cmds.append(("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#d8f3dc")))
+                else:
+                    style_cmds.append(("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#fff3cd")))
+            elif planned:
+                style_cmds.append(("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#e3f2fd")))
+            elif act:
+                style_cmds.append(("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#f0f0f0")))
+    table.setStyle(TableStyle(style_cmds))
+
+    title_text = title or f"{plan['name']} — 計画 vs 実績"
+    subtitle = (f"スナップショット: {snapshot.get('taken_at', '?')} | "
+                f"一致 {match_count} / 差分 {diff_count} | "
+                f"出力日: {datetime.now().strftime('%Y-%m-%d')}")
+    story = [_header_block(title_text, subtitle, font), table]
+    doc.build(story)
+    return buf.getvalue()
+
+
 def generate_aggregation_pdf(data: dict, title: str = "作付集計") -> bytes:
     """年×作物の集計表 PDF を生成。"""
     from reportlab.lib import colors

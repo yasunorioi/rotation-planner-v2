@@ -116,6 +116,18 @@ CREATE TABLE IF NOT EXISTS plan_details (
 CREATE INDEX IF NOT EXISTS idx_plan_details_plan ON plan_details(plan_id);
 CREATE INDEX IF NOT EXISTS idx_plan_details_field ON plan_details(field_id);
 
+-- 輪作計画スナップショット (v2 拡張)
+CREATE TABLE IF NOT EXISTS plan_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL REFERENCES rotation_plans(id) ON DELETE CASCADE,
+    taken_at TEXT NOT NULL,
+    score REAL,
+    data_json TEXT NOT NULL,
+    label TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_plan_snapshots_plan ON plan_snapshots(plan_id);
+
 -- ═══════════════════════════════════════════════════════════════
 -- 7. 防除マスタ（組織単位で共有）
 -- ═══════════════════════════════════════════════════════════════

@@ -7,8 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import configure_db
 from app.routes import (
-    aggregation, crop_masters, dashboard, fields, history,
-    pesticide_masters, pesticide_records, plans,
+    aggregation, backup, crop_masters, dashboard, fields, history,
+    pesticide_masters, pesticide_records, plans, rotation_check,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,3 +30,5 @@ app.include_router(crop_masters.router)
 app.include_router(pesticide_masters.router)
 app.include_router(pesticide_records.router)
 app.include_router(aggregation.router)
+app.include_router(rotation_check.router)
+app.include_router(backup.router)

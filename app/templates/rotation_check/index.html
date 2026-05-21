@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}輪作チェック{% endblock %}
+{% block content %}
+<h2>輪作チェック (科ベース)</h2>
+<p>作物マスタの「科」分類を使って、各ほ場の連作・短期再作付を検出します。</p>
+
+<form method="get" action="/rotation-check/" class="filter-bar">
+  <label>同科再作付の許容ギャップ:
+    <input type="number" name="gap" min="1" max="10" value="{{ data.gap_threshold }}" style="width:60px;">
+    年以内を「短期」と判定
+  </label>
+  <button type="submit">再計算</button>
+</form>
+
+<p class="hint">対象ほ場 {{ data.field_count }} 件</p>
+
+<section>
+  <h3>🔴 連作 ({{ data.consecutive|length }} 件)</h3>
+  <p class="hint">前年と同じ「科」で作付している箇所。</p>
+  {% if not data.consecutive %}
+  <p class="hint">該当なし</p>
+  {% else %}
+  <table class="check-table">
+    <thead>
+      <tr><th>圃場</th><th>前年</th><th>当年</th><th>科</th></tr>
+    </thead>
+    <tbody>
+      {% for c in data.consecutive %}
+      <tr>
+        <td>{{ c.field_code }} <small>{{ c.field_name or "" }}</small></td>
+        <td>{{ c.prev_year }}: {{ c.prev_crop }}</td>
+        <td>{{ c.year }}: {{ c.crop }}</td>
+        <td><span class="family-tag">{{ c.family }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section>
+  <h3>🟡 短期再作付 ({{ data.short_repeat|length }} 件)</h3>
+  <p class="hint">同じ科を {{ data.gap_threshold }} 年以内に再度作付している箇所 (連作除く)。</p>
+  {% if not data.short_repeat %}
+  <p class="hint">該当なし</p>
+  {% else %}
+  <table class="check-table">
+    <thead>
+      <tr><th>圃場</th><th>前回</th><th>今回</th><th>ギャップ</th><th>科</th></tr>
+    </thead>
+    <tbody>
+      {% for c in data.short_repeat %}
+      <tr>
+        <td>{{ c.field_code }} <small>{{ c.field_name or "" }}</small></td>
+        <td>{{ c.prev_year }}: {{ c.prev_crop }}</td>
+        <td>{{ c.year }}: {{ c.crop }}</td>
+        <td>{{ c.gap }} 年</td>
+        <td><span class="family-tag">{{ c.family }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% if data.unclassified %}
+<section>
+  <h3>📝 科分類未設定の作物 ({{ data.unclassified|length }} 件)</h3>
+  <p class="hint">これらの作物は <a href="/crop-masters/">作物マスタ</a> で科を設定してください (空のままだとチェック対象外)。</p>
+  <ul>
+    {% for c in data.unclassified %}<li>{{ c }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

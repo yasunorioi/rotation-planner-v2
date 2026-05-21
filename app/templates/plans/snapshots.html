@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}スナップショット履歴 — {{ plan.name }}{% endblock %}
+{% block content %}
+<p><a href="/plans/{{ plan.id }}">← {{ plan.name }} に戻る</a></p>
+<h2>スナップショット履歴 — {{ plan.name }}</h2>
+
+{% if not snapshots %}
+<p class="hint">まだスナップショットがありません。計画詳細から「スナップショット保存」を押してください。</p>
+{% else %}
+<table class="snapshots-table">
+  <thead>
+    <tr><th>取得日時</th><th>スコア</th><th>ラベル</th><th>操作</th></tr>
+  </thead>
+  <tbody>
+    {% for s in snapshots %}
+    <tr id="snapshot-{{ s.id }}">
+      <td>{{ s.taken_at }}</td>
+      <td>{{ "%.1f"|format(s.score) if s.score is not none else "-" }}</td>
+      <td>{{ s.label or "" }}</td>
+      <td>
+        <a href="/plans/{{ plan.id }}/compare?snap_id={{ s.id }}">比較</a>
+        |
+        <a href="/plans/{{ plan.id }}/compare.pdf?snap_id={{ s.id }}">PDF</a>
+        |
+        <button hx-delete="/plans/{{ plan.id }}/snapshots/{{ s.id }}"
+                hx-target="#snapshot-{{ s.id }}" hx-swap="outerHTML"
+                hx-confirm="このスナップショットを削除しますか？">削除</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
