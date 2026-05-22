@@ -1474,6 +1474,145 @@ def test_crop_master_seeded_on_fresh_db(app_client):
         assert crop in r.text
 
 
+def test_delete_persists_across_requests_all_resources(app_client):
+    """全 CRUD で削除が複数リクエスト跨いで残ること。
+    過去に _migrate() が毎リクエスト走り INSERT OR IGNORE で seed を
+    巻き戻す致命バグがあったため、近似ケースを網羅監視。"""
+    import re
+
+    def churn():
+        """別エンドポイントを叩いて、何かが connect() に介入しないか刺激する。"""
+        for url in ("/", "/fields/", "/crop-masters/", "/pesticide-masters/"):
+            app_client.get(url)
+
+    failures = []
+
+    # fields
+    r = app_client.post("/fields/", data={"field_code": "DA1", "name": "x", "area_ha": "1.0"})
+    fid = int(re.search(r'id="field-(\d+)"', r.text).group(1))
+    app_client.delete(f"/fields/{fid}")
+    churn()
+    r = app_client.get("/fields/")
+    if "DA1" in r.text:
+        failures.append("fields: 削除した DA1 が復活")
+
+    # plans
+    r = app_client.post("/plans/", data={"name": "DA1plan", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    app_client.delete(f"/plans/{pid}")
+    churn()
+    r = app_client.get("/plans/")
+    if "DA1plan" in r.text:
+        failures.append("plans: 削除した DA1plan が復活")
+
+    # pesticide-records
+    fid2 = _make_field(app_client, "DA2")
+    r = app_client.post("/pesticide-records/", data={
+        "field_id": fid2, "spray_date": "2026-05-10", "pesticide_name": "DA薬",
+        "dilution_rate": "", "spray_amount": "", "spray_unit": "", "notes": "",
+    })
+    rid = int(re.search(r'id="record-(\d+)"', r.text).group(1))
+    app_client.delete(f"/pesticide-records/{rid}")
+    churn()
+    r = app_client.get("/pesticide-records/")
+    if "DA薬" in r.text:
+        failures.append("pesticide-records: 削除した DA薬 が復活")
+
+    # pesticide-masters
+    r = app_client.post("/pesticide-masters/", data={
+        "name": "DAmaster", "crop": "", "dilution_rate": "",
+        "application_method": "", "usage_timing": "", "notes": "",
+    })
+    mid = int(re.search(r'id="master-(\d+)"', r.text).group(1))
+    app_client.delete(f"/pesticide-masters/{mid}")
+    churn()
+    r = app_client.get("/pesticide-masters/")
+    if "DAmaster" in r.text:
+        failures.append("pesticide-masters: 削除した DAmaster が復活")
+
+    # crop-masters (新規追加した非seed)
+    r = app_client.post("/crop-masters/", data={
+        "name": "DAcrop", "category": "", "family": "",
+        "display_order": "99", "is_active": "on",
+    })
+    cid = int(re.search(r'id="crop-(\d+)"', r.text).group(1))
+    app_client.delete(f"/crop-masters/{cid}")
+    churn()
+    r = app_client.get("/crop-masters/")
+    if "DAcrop" in r.text:
+        failures.append("crop-masters: 削除した DAcrop が復活")
+
+    # crop-masters (seed)
+    r = app_client.get("/crop-masters/")
+    for rid, content in re.findall(r'<tr id="crop-(\d+)"[^>]*>(.*?)</tr>', r.text, re.DOTALL):
+        if "<td>あずき</td>" in content:
+            app_client.delete(f"/crop-masters/{rid}")
+            break
+    churn()
+    r = app_client.get("/crop-masters/")
+    if "<td>あずき</td>" in r.text:
+        failures.append("crop-masters: 削除した seed 'あずき' が復活")
+
+    # plan snapshot
+    r = app_client.post("/plans/", data={"name": "snapplan", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    app_client.post(f"/plans/{pid}/snapshot", data={"label": "snaptest"})
+    r = app_client.get(f"/plans/{pid}/snapshots")
+    sid = int(re.search(r'id="snapshot-(\d+)"', r.text).group(1))
+    app_client.delete(f"/plans/{pid}/snapshots/{sid}")
+    churn()
+    r = app_client.get(f"/plans/{pid}/snapshots")
+    if "snaptest" in r.text:
+        failures.append("plan-snapshots: 削除した snaptest が復活")
+
+    assert not failures, "\n".join(failures)
+
+
+def test_update_persists_across_requests_all_resources(app_client):
+    """更新が複数リクエスト跨いで残ること。"""
+    import re
+
+    def churn():
+        for url in ("/", "/fields/", "/crop-masters/"):
+            app_client.get(url)
+
+    failures = []
+
+    # fields
+    r = app_client.post("/fields/", data={"field_code": "UA1", "name": "old", "area_ha": "1.0"})
+    fid = int(re.search(r'id="field-(\d+)"', r.text).group(1))
+    app_client.put(f"/fields/{fid}", data={
+        "field_code": "UA1", "name": "NEW名", "district": "", "area_ha": "2.5",
+        "fixed_crop": "", "notes": "",
+    })
+    churn()
+    r = app_client.get("/fields/")
+    if "NEW名" not in r.text:
+        failures.append("fields: 更新した NEW名 が消えた")
+
+    # crop-masters (seed の更新)
+    r = app_client.get("/crop-masters/")
+    cid = None
+    for rid, content in re.findall(r'<tr id="crop-(\d+)"[^>]*>(.*?)</tr>', r.text, re.DOTALL):
+        if "<td>かぼちゃ</td>" in content:
+            cid = int(rid)
+            break
+    assert cid is not None
+    app_client.put(f"/crop-masters/{cid}", data={
+        "name": "南瓜",  # 改名
+        "category": "野菜", "family": "ウリ科",
+        "display_order": "8", "is_active": "on",
+    })
+    churn()
+    r = app_client.get("/crop-masters/")
+    if "<td>南瓜</td>" not in r.text:
+        failures.append("crop-masters: seed 更新した '南瓜' が消えた")
+    if "<td>かぼちゃ</td>" in r.text:
+        failures.append("crop-masters: 改名前の 'かぼちゃ' が復活/残存")
+
+    assert not failures, "\n".join(failures)
+
+
 def test_add_button_above_table_on_list_pages(app_client):
     """＋ 新規追加 ボタンが table の上に配置されていることを検証。
     テーブルが画面いっぱいになるとボタンが折り返し下になり「ない」と
