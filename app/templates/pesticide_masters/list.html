@@ -20,6 +20,10 @@
 
 <p class="hint">該当 {{ masters|length }} 件 | 防除記録の農薬名候補として使われます。</p>
 
+<div id="master-form-slot">
+  <button hx-get="/pesticide-masters/new" hx-target="#master-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+
 <table id="masters-table">
   <thead>
     <tr>
@@ -32,8 +36,4 @@
     {% endfor %}
   </tbody>
 </table>
-
-<div id="master-form-slot">
-  <button hx-get="/pesticide-masters/new" hx-target="#master-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
-</div>
 {% endblock %}

@@ -1474,6 +1474,32 @@ def test_crop_master_seeded_on_fresh_db(app_client):
         assert crop in r.text
 
 
+def test_add_button_above_table_on_list_pages(app_client):
+    """＋ 新規追加 ボタンが table の上に配置されていることを検証。
+    テーブルが画面いっぱいになるとボタンが折り返し下になり「ない」と
+    誤認されるため、必ずテーブルより前に出す。"""
+    cases = [
+        ("/fields/", "fields-table", "field-form-slot"),
+        ("/plans/", "plans-table", "plan-form-slot"),
+        ("/pesticide-records/", "records-table", "record-form-slot"),
+        ("/pesticide-masters/", "masters-table", "master-form-slot"),
+        ("/crop-masters/", "crops-table", "crop-form-slot"),
+    ]
+    failures = []
+    for url, table_id, slot_id in cases:
+        r = app_client.get(url)
+        text = r.text
+        slot_pos = text.find(f'id="{slot_id}"')
+        table_pos = text.find(f'id="{table_id}"')
+        if slot_pos < 0:
+            failures.append(f"{url}: slot id='{slot_id}' なし")
+        elif table_pos < 0:
+            failures.append(f"{url}: table id='{table_id}' なし")
+        elif slot_pos > table_pos:
+            failures.append(f"{url}: 新規追加 slot が table の後ろにある (slot={slot_pos}, table={table_pos})")
+    assert not failures, "\n".join(failures)
+
+
 def test_all_inline_forms_have_submit_button(app_client):
     """全 inline CRUD form に type=submit ボタンが必ずあることを検証。
     フォーム rendering が壊れた時に気づける。"""

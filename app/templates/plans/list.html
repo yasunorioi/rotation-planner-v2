@@ -3,6 +3,10 @@
 {% block content %}
 <h2>輪作計画</h2>
 
+<div id="plan-form-slot">
+  <button hx-get="/plans/new" hx-target="#plan-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+
 <table id="plans-table">
   <thead>
     <tr>
@@ -15,8 +19,4 @@
     {% endfor %}
   </tbody>
 </table>
-
-<div id="plan-form-slot">
-  <button hx-get="/plans/new" hx-target="#plan-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
-</div>
 {% endblock %}

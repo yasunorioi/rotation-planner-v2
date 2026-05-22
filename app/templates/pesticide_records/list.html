@@ -46,6 +46,14 @@
   <div id="pr-import-result"></div>
 </div>
 
+<div id="record-form-slot">
+  {% if not fields %}
+    <p class="hint">先に <a href="/fields/">ほ場</a> を登録してください。</p>
+  {% else %}
+    <button hx-get="/pesticide-records/new" hx-target="#record-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+  {% endif %}
+</div>
+
 <table id="records-table">
   <thead>
     <tr>
@@ -58,12 +66,4 @@
     {% endfor %}
   </tbody>
 </table>
-
-<div id="record-form-slot">
-  {% if not fields %}
-    <p class="hint">先に <a href="/fields/">ほ場</a> を登録してください。</p>
-  {% else %}
-    <button hx-get="/pesticide-records/new" hx-target="#record-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
-  {% endif %}
-</div>
 {% endblock %}

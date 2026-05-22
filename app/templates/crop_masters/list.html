@@ -20,6 +20,10 @@
 
 <p class="hint">該当 {{ crops|length }} 件 | 作付履歴・圃場フォーム・計画制約の datalist に使われます。</p>
 
+<div id="crop-form-slot">
+  <button hx-get="/crop-masters/new" hx-target="#crop-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+
 <table id="crops-table">
   <thead>
     <tr>
@@ -32,8 +36,4 @@
     {% endfor %}
   </tbody>
 </table>
-
-<div id="crop-form-slot">
-  <button hx-get="/crop-masters/new" hx-target="#crop-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
-</div>
 {% endblock %}

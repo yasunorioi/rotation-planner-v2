@@ -25,6 +25,10 @@
 
 <p class="hint">該当 {{ fields|length }} 件</p>
 
+<div id="field-form-slot">
+  <button hx-get="/fields/new" hx-target="#field-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
+</div>
+
 <table id="fields-table">
   <thead>
     <tr>
@@ -37,10 +41,6 @@
     {% endfor %}
   </tbody>
 </table>
-
-<div id="field-form-slot">
-  <button hx-get="/fields/new" hx-target="#field-form-slot" hx-swap="innerHTML">＋ 新規追加</button>
-</div>
 
 <div class="import-block">
   <h3>CSV 取込/出力
