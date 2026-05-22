@@ -1541,6 +1541,30 @@ def test_all_inline_forms_have_submit_button(app_client):
     assert not failures, "\n".join(failures)
 
 
+def test_crop_master_delete_persists_across_requests(app_client):
+    """削除した seed crop が次のリクエストで復活しないこと。
+    Why: 以前は connect() ごとに db_schema.sql が再 executescript されていて、
+    INSERT OR IGNORE の seed が削除を巻き戻していた。"""
+    # てんさい を削除
+    r = app_client.get("/crop-masters/")
+    import re
+    cid = None
+    for rid, content in re.findall(r'<tr id="crop-(\d+)"[^>]*>(.*?)</tr>', r.text, re.DOTALL):
+        if "<td>てんさい</td>" in content:
+            cid = int(rid)
+            break
+    assert cid is not None, "seed のてんさいが見つからない"
+    r = app_client.delete(f"/crop-masters/{cid}")
+    assert r.status_code == 200
+    # 次のリクエストで復活してないか
+    r = app_client.get("/crop-masters/")
+    assert "てんさい" not in r.text, "削除した seed が再投入されている"
+    # さらにもう1往復
+    app_client.get("/fields/")
+    r = app_client.get("/crop-masters/")
+    assert "てんさい" not in r.text
+
+
 def test_crop_master_crud(app_client):
     # 新規
     r = app_client.post(
