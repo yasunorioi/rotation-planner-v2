@@ -7,6 +7,10 @@
            hx-get="/history/cell?field_id={{ field_id }}&year={{ year }}"
            hx-trigger="keyup[key=='Escape']"
            hx-target="closest td" hx-swap="outerHTML">
+    <button type="submit" class="cell-save-btn" title="保存 (Enter)">✓</button>
+    <button type="button" class="cell-cancel-btn" title="キャンセル (Esc)"
+            hx-get="/history/cell?field_id={{ field_id }}&year={{ year }}"
+            hx-target="closest td" hx-swap="outerHTML">✗</button>
     <datalist id="crop-suggestions-{{ field_id }}-{{ year }}">
       {% for c in crops %}<option value="{{ c }}"></option>{% endfor %}
     </datalist>

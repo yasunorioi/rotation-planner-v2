@@ -1173,6 +1173,18 @@ def test_aggregation_empty(app_client):
     assert "履歴データがありません" in r.text
 
 
+def test_history_cell_edit_has_save_cancel_buttons(app_client):
+    fid = _make_field(app_client, "BTN1")
+    r = app_client.get(f"/history/cell/edit?field_id={fid}&year=R7")
+    assert r.status_code == 200
+    # 保存ボタン (✓) と キャンセルボタン (✗) が出る
+    assert "cell-save-btn" in r.text
+    assert "cell-cancel-btn" in r.text
+    assert "✓" in r.text and "✗" in r.text
+    # キャンセルボタンは hx-get で表示モードへ戻る
+    assert f'hx-get="/history/cell?field_id={fid}&year=R7"' in r.text
+
+
 def test_history_cell_edit_has_crop_datalist(app_client):
     fid = _make_field(app_client, "DL1")
     # 履歴に「あさつき」を1件入れて、それが候補に出ることを確認
