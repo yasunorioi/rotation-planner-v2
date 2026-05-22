@@ -51,7 +51,10 @@ form {
 }
 form label { display: flex; flex-direction: column; font-size: 0.85rem; color: #555; }
 form input { padding: 0.35rem; font-size: 1rem; }
-form button { grid-column: auto; padding: 0.5rem 1rem; }
+form button { grid-column: auto; padding: 0.5rem 1rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; color: #333; cursor: pointer; }
+form button[type="submit"] { background: #2d6a4f; color: #fff; border-color: #2d6a4f; font-weight: 600; }
+form button[type="submit"]:hover { background: #1f4d36; }
+form button[type="button"]:hover { background: #f0f0f0; }
 
 .field-map { height: 70vh; min-height: 480px; border: 1px solid #d8d8d8; border-radius: 6px; }
 .polygon-toolbar { display: flex; gap: 0.75rem; align-items: center; margin: 0.75rem 0; }

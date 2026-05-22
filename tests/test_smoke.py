@@ -1474,6 +1474,47 @@ def test_crop_master_seeded_on_fresh_db(app_client):
         assert crop in r.text
 
 
+def test_all_inline_forms_have_submit_button(app_client):
+    """全 inline CRUD form に type=submit ボタンが必ずあることを検証。
+    フォーム rendering が壊れた時に気づける。"""
+    import re
+    # 各 form fragment を新規 + 編集の両方で確認
+    cases: list[tuple[str, str]] = []  # (url, expected_button_text)
+    cases.append(("/fields/new", "追加"))
+    cases.append(("/plans/new", "追加"))
+    cases.append(("/pesticide-records/new", "追加"))
+    cases.append(("/pesticide-masters/new", "追加"))
+    cases.append(("/crop-masters/new", "追加"))
+    # 既存レコードの edit
+    fid = _make_field(app_client, "FB1")
+    cases.append((f"/fields/{fid}/edit", "更新"))
+    r = app_client.post("/plans/", data={"name": "FBP", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    cases.append((f"/plans/{pid}/edit", "更新"))
+    # crop_master の seed があれば edit も試す
+    r = app_client.get("/crop-masters/")
+    m = re.search(r'id="crop-(\d+)"', r.text)
+    if m:
+        cases.append((f"/crop-masters/{m.group(1)}/edit", "更新"))
+
+    failures = []
+    for url, label in cases:
+        r = app_client.get(url)
+        if r.status_code != 200:
+            failures.append(f"{url}: status {r.status_code}")
+            continue
+        # form 内に type="submit" でラベルが含まれるボタンが存在するか
+        m = re.search(
+            r'<button[^>]*type="submit"[^>]*>([^<]+)</button>',
+            r.text,
+        )
+        if m is None:
+            failures.append(f"{url}: type=submit ボタンが見つからない")
+        elif label not in m.group(1):
+            failures.append(f"{url}: 期待ラベル '{label}' でなく '{m.group(1)}'")
+    assert not failures, "\n".join(failures)
+
+
 def test_crop_master_crud(app_client):
     # 新規
     r = app_client.post(
