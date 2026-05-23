@@ -27,6 +27,15 @@ uvicorn app.main:app --reload
 - React 廃止 → HTMX (サーバレンダリング)
 - ほ場ポリゴン描画のみ Leaflet を独立島として残す
 
+## ドキュメント
+
+詳細は `docs/`:
+
+- [`docs/architecture.md`](docs/architecture.md) — スタック / 設計判断 / ガッチャ集
+- [`docs/features.md`](docs/features.md) — 全機能の URL と概要
+- [`docs/schema.md`](docs/schema.md) — DB テーブルと値の形式
+- [`docs/csv-formats.md`](docs/csv-formats.md) — CSV / KML の列仕様
+
 ## PDF にロゴを入れる
 
 `data/logo.png` (もしくは `.jpg` / `.gif`) を置けば、計画 PDF と防除記録 PDF
