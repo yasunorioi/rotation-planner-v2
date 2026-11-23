@@ -3,6 +3,49 @@
 {% block content %}
 <h2>ダッシュボード</h2>
 
+<section class="stepper">
+  <h3>セットアップの進みぐあい</h3>
+  <ol class="steps">
+    <li class="step {{ 'done' if setup.crops_done else 'todo' }}">
+      <span class="step-no">1</span>
+      <div class="step-body">
+        <span class="step-title">作物を選ぶ</span>
+        <span class="step-state">{% if setup.crops_done %}✓ {{ crop_count }} 品目{% else %}まだ未選択{% endif %}</span>
+      </div>
+      <a class="step-cta" href="/crop-masters/">{% if setup.crops_done %}編集{% else %}作物を選ぶ{% endif %}</a>
+    </li>
+    <li class="step {{ 'done' if setup.fields_done else 'todo' }}">
+      <span class="step-no">2</span>
+      <div class="step-body">
+        <span class="step-title">ほ場を登録（地図）</span>
+        <span class="step-state">{% if setup.fields_done %}✓ {{ field_count }} 筆{% else %}まだ未登録{% endif %}</span>
+      </div>
+      <a class="step-cta" href="/fields/">{% if setup.fields_done %}編集{% else %}ほ場を登録{% endif %}</a>
+    </li>
+    <li class="step {{ 'done' if setup.coverage_pct == 100 else ('progress' if setup.history_started else 'todo') }}">
+      <span class="step-no">3</span>
+      <div class="step-body">
+        <span class="step-title">作付けを入れる（今年＋過去）</span>
+        <span class="step-state">
+          {% if setup.fields_done %}カバー率 {{ setup.coverage_pct }}%（{{ setup.fields_with_history }}/{{ field_count }} 筆）{% else %}ほ場の登録後に{% endif %}
+        </span>
+      </div>
+      <a class="step-cta" href="/history/">履歴グリッド</a>
+    </li>
+    <li class="step {{ 'ready' if setup.predict_ready else 'todo' }}">
+      <span class="step-no">4</span>
+      <div class="step-body">
+        <span class="step-title">来年を予測</span>
+        <span class="step-state">
+          {% if setup.predict_ready %}いつでも実行可{% if setup.coverage_pct < 100 %}・不明セルは計画で「無視／安全側」を選択{% endif %}{% else %}作物とほ場を先に{% endif %}
+        </span>
+      </div>
+      <a class="step-cta" href="/plans/">輪作計画へ</a>
+    </li>
+  </ol>
+  <p class="stepper-note">※ 作付履歴は借地・新規取得・前作他人などで欠けるのが普通です。空欄は「不明」として扱われ、<strong>予測はいつでも実行できます</strong>（履歴が多いほど精度が上がります）。</p>
+</section>
+
 <div class="stats">
   <a class="stat" href="/fields/"><span class="num">{{ field_count }}</span><span class="lbl">ほ場</span></a>
   <a class="stat" href="/plans/"><span class="num">{{ plan_count }}</span><span class="lbl">輪作計画</span></a>
@@ -10,15 +53,10 @@
   <a class="stat" href="/pesticide-records/?year={{ current_year }}"><span class="num">{{ records_year }}</span><span class="lbl">{{ current_year }}年の防除</span></a>
 </div>
 
-{% if no_polygon or no_history %}
+{% if no_polygon %}
 <h3>次のアクション</h3>
 <ul class="actions">
-  {% if no_polygon %}
   <li><a href="/fields/?polygon=無">ポリゴン未登録のほ場 {{ no_polygon }} 件</a> — 地図機能をフル活用するなら描画推奨</li>
-  {% endif %}
-  {% if no_history %}
-  <li><a href="/fields/">作付履歴ゼロのほ場 {{ no_history }} 件</a> — 過去年を入力すると最適化が現実的に</li>
-  {% endif %}
 </ul>
 {% endif %}
 

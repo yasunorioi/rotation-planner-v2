@@ -10,16 +10,28 @@
 <header>
   <h1><a href="/">rotation-planner v2</a></h1>
   <nav>
-    <a href="/">ダッシュボード</a>
-    <a href="/fields/">ほ場</a>
-    <a href="/history/">作付履歴</a>
-    <a href="/plans/">輪作計画</a>
-    <a href="/pesticide-records/">防除記録</a>
-    <a href="/crop-masters/">作物マスタ</a>
-    <a href="/pesticide-masters/">農薬マスタ</a>
-    <a href="/backup/">バックアップ</a>
-    <a href="/aggregation/">集計</a>
-    <a href="/rotation-check/">輪作チェック</a>
+    <a class="nav-home" href="/">ダッシュボード</a>
+    <div class="nav-group">
+      <span class="nav-label">準備</span>
+      <a href="/crop-masters/">作物マスタ</a>
+      <a href="/fields/">ほ場</a>
+    </div>
+    <div class="nav-group">
+      <span class="nav-label">記録</span>
+      <a href="/history/">作付履歴</a>
+    </div>
+    <div class="nav-group">
+      <span class="nav-label">計画</span>
+      <a href="/plans/">輪作計画</a>
+      <a href="/rotation-check/">輪作チェック</a>
+    </div>
+    <div class="nav-group nav-group-sub">
+      <span class="nav-label">その他</span>
+      <a href="/pesticide-records/">防除記録</a>
+      <a href="/pesticide-masters/">農薬マスタ</a>
+      <a href="/aggregation/">集計</a>
+      <a href="/backup/">バックアップ</a>
+    </div>
   </nav>
   {% if user %}<small>{{ user.display_name }} ({{ user.role }})</small>{% endif %}
 </header>

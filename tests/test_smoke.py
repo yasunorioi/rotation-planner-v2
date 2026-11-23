@@ -30,12 +30,15 @@ def test_dashboard_recent_activity(app_client):
 
 
 def test_dashboard_action_suggestions(app_client):
-    # ポリゴン無し + 履歴空 のほ場を作る → アクション提案に出る
+    # ポリゴン無し + 履歴空 のほ場を作る
     _make_field(app_client, "NOAH1")
     r = app_client.get("/")
+    # ポリゴン未登録は従来どおり「次のアクション」に残す
     assert "次のアクション" in r.text
     assert "ポリゴン未登録のほ場" in r.text
-    assert "作付履歴ゼロのほ場" in r.text
+    # 履歴ゼロは単独 nudge を廃止し、セットアップ・ステッパーのカバー率で表現する
+    assert "セットアップの進みぐあい" in r.text
+    assert "カバー率 0%" in r.text
 
 
 def test_fields_empty_then_create_edit_delete(app_client):

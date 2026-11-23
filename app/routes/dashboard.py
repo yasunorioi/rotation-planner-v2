@@ -20,6 +20,10 @@ def dashboard(request: Request, user: CurrentUser):
         field_count = conn.execute(
             "SELECT COUNT(*) AS c FROM fields WHERE user_id = ?", (uid,)
         ).fetchone()["c"]
+        # セットアップ進捗: ユーザーが選んだ作物の数
+        crop_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM user_crops WHERE user_id = ?", (uid,)
+        ).fetchone()["c"]
         plan_count = conn.execute(
             "SELECT COUNT(*) AS c FROM rotation_plans WHERE user_id = ?", (uid,)
         ).fetchone()["c"]
@@ -67,11 +71,26 @@ def dashboard(request: Request, user: CurrentUser):
             ")",
             (uid,),
         ).fetchone()["c"]
+    # セットアップ進捗（ステッパー用）
+    fields_with_history = field_count - no_history
+    coverage_pct = round(100 * fields_with_history / field_count) if field_count else 0
+    setup = {
+        "crops_done": crop_count > 0,
+        "fields_done": field_count > 0,
+        # 作付けは「完全」を求めない（履歴は本来欠けるもの）。カバー率で進捗表示。
+        "history_started": fields_with_history > 0,
+        "coverage_pct": coverage_pct,
+        "fields_with_history": fields_with_history,
+        # 予測はロックしない。履歴があるほど精度が上がる、という位置づけ。
+        "predict_ready": field_count > 0 and crop_count > 0,
+    }
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
             "user": user,
+            "setup": setup,
+            "crop_count": crop_count,
             "field_count": field_count,
             "plan_count": plan_count,
             "history_count": history_count,
