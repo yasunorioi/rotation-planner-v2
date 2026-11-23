@@ -199,3 +199,18 @@ header nav a { margin-right: 0; }
 .step-cta { flex: 0 0 auto; font-size: 0.8rem; padding: 0.3rem 0.8rem; border: 1px solid #2d6a4f; border-radius: 5px; color: #2d6a4f; text-decoration: none; white-space: nowrap; }
 .step-cta:hover { background: #2d6a4f; color: #fff; }
 .stepper-note { font-size: 0.78rem; color: #777; margin: 0.65rem 0.15rem 0; }
+
+/* --- plan: unknown_mode (不明の扱い) --- */
+/* form 既定の display:grid だと table / fieldset / 保存 がセルに並び崩れる → block に上書き */
+#constraints-form { display: block; }
+/* form{display:grid} が hidden 属性(UA の display:none)を上書きして hidden フォームが
+   表示されてしまうのを防ぐ（削除用の隠しフォーム等） */
+form[hidden] { display: none; }
+.unknown-mode { border: 1px solid #cfe3d6; border-radius: 6px; padding: 0.5rem 0.9rem 0.7rem; margin: 1rem 0; background: #f6fbf7; }
+.unknown-mode legend { font-weight: 600; font-size: 0.9rem; color: #2d6a4f; padding: 0 0.4rem; }
+.unknown-mode label { display: block; margin: 0.35rem 0; font-size: 0.9rem; cursor: pointer; }
+
+/* --- history grid: 不明セル --- */
+.history-cell.unknown { color: #999; font-style: italic; background: #f4f4f4; }
+.cell-unknown-btn { background: none; border: 1px solid #ccc; color: #777; border-radius: 4px; cursor: pointer; font-size: 0.75rem; padding: 0 0.35rem; }
+.cell-unknown-btn:hover { background: #eee; }

@@ -312,6 +312,10 @@ def cell_save(
     crop: str = Form(""),
 ):
     crop = crop.strip()
+    # 「不明」は内部マーカー UNKNOWN に正規化（実作物名として保存しない）。
+    # 空欄(未入力)=行削除 と区別し、UNKNOWN は「記録なし」として行で残す。
+    if crop in ("不明", "UNKNOWN"):
+        crop = "UNKNOWN"
     with connect() as conn:
         _ensure_field_owned(conn, user["id"], field_id)
         if crop:

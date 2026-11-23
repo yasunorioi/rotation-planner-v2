@@ -1,3 +1,3 @@
-<td class="history-cell {% if not crop %}empty{% endif %}"
+<td class="history-cell {% if crop == 'UNKNOWN' %}unknown{% elif not crop %}empty{% endif %}"
     hx-get="/history/cell/edit?field_id={{ field_id }}&year={{ year }}"
-    hx-target="this" hx-swap="outerHTML">{{ crop }}</td>
+    hx-target="this" hx-swap="outerHTML">{% if crop == 'UNKNOWN' %}不明{% else %}{{ crop }}{% endif %}</td>

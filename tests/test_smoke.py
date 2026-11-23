@@ -41,6 +41,66 @@ def test_dashboard_action_suggestions(app_client):
     assert "カバー率 0%" in r.text
 
 
+def test_plan_unknown_mode(app_client):
+    from app.db import connect
+    from app.optimizer_service import constraints_from_dict, load_unknown_mode
+
+    # 純関数: metadata_json のパースと Constraints への伝播
+    assert load_unknown_mode({"metadata_json": '{"unknown_mode": "safe"}'}) == "safe"
+    assert load_unknown_mode({"metadata_json": "{}"}) == "ignore"
+    assert load_unknown_mode({}) == "ignore"
+    assert load_unknown_mode({"metadata_json": "broken"}) == "ignore"  # 壊れても既定
+    assert constraints_from_dict({}, "safe").unknown_mode == "safe"
+    assert constraints_from_dict({}, "bogus").unknown_mode == "ignore"  # 不正値は既定
+
+    # UI 往復: 制約フォームから safe を保存 → 再取得で checked + DB 永続
+    with connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO rotation_plans (user_id, name, start_year, end_year) "
+            "VALUES (1, 'P', '2026', '2028')"
+        )
+        pid = cur.lastrowid
+    r = app_client.post(
+        f"/plans/{pid}/constraints", data={"unknown_mode": "safe"}, follow_redirects=True
+    )
+    assert r.status_code == 200
+    assert 'value="safe" checked' in r.text
+    with connect() as conn:
+        plan = dict(
+            conn.execute(
+                "SELECT metadata_json FROM rotation_plans WHERE id = ?", (pid,)
+            ).fetchone()
+        )
+    assert load_unknown_mode(plan) == "safe"
+
+
+def test_history_cell_unknown(app_client):
+    from app.db import connect
+
+    with connect() as conn:
+        fid = conn.execute(
+            "INSERT INTO fields (user_id, field_code, area_ha) VALUES (1, 'F1', 1.0)"
+        ).lastrowid
+
+    # 「不明」を保存 → 内部 UNKNOWN に正規化、表示は「不明」+ unknown クラス
+    r = app_client.post("/history/cell", data={"field_id": fid, "year": "2024", "crop": "不明"})
+    assert r.status_code == 200
+    assert "不明" in r.text and "unknown" in r.text
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT crop FROM crop_history WHERE field_id = ? AND year = '2024'", (fid,)
+        ).fetchone()
+    assert row["crop"] == "UNKNOWN"  # 実作物名 '不明' ではなくマーカー
+
+    # 空欄(未入力)は行削除 — 不明(UNKNOWN 行あり) と区別される
+    app_client.post("/history/cell", data={"field_id": fid, "year": "2024", "crop": ""})
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT crop FROM crop_history WHERE field_id = ? AND year = '2024'", (fid,)
+        ).fetchone()
+    assert row is None
+
+
 def test_fields_empty_then_create_edit_delete(app_client):
     # 初期状態
     r = app_client.get("/fields/")
