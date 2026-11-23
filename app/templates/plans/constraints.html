@@ -37,20 +37,6 @@
       {% endfor %}
     </tbody>
   </table>
-
-  <fieldset class="unknown-mode">
-    <legend>不明（空欄）の作付履歴の扱い</legend>
-    <p class="hint">借地・新規取得・前作他人・記録なしで履歴が欠ける年の扱いを選びます。</p>
-    <label>
-      <input type="radio" name="unknown_mode" value="ignore" {{ 'checked' if unknown_mode != 'safe' else '' }}>
-      無視 — 不明年には制約を課さない（予測を狭めない。既定）
-    </label>
-    <label>
-      <input type="radio" name="unknown_mode" value="safe" {{ 'checked' if unknown_mode == 'safe' else '' }}>
-      安全側 — 不明年はリスク作物（てんさい等の連作回避が必要な作物）を避ける
-    </label>
-  </fieldset>
-
   <div class="form-actions">
     <button type="submit">保存</button>
   </div>

@@ -200,15 +200,12 @@ header nav a { margin-right: 0; }
 .step-cta:hover { background: #2d6a4f; color: #fff; }
 .stepper-note { font-size: 0.78rem; color: #777; margin: 0.65rem 0.15rem 0; }
 
-/* --- plan: unknown_mode (不明の扱い) --- */
-/* form 既定の display:grid だと table / fieldset / 保存 がセルに並び崩れる → block に上書き */
+/* --- constraints 画面レイアウト修正 --- */
+/* form 既定の display:grid だと table / 保存 がセルに並び崩れる → block に上書き */
 #constraints-form { display: block; }
 /* form{display:grid} が hidden 属性(UA の display:none)を上書きして hidden フォームが
    表示されてしまうのを防ぐ（削除用の隠しフォーム等） */
 form[hidden] { display: none; }
-.unknown-mode { border: 1px solid #cfe3d6; border-radius: 6px; padding: 0.5rem 0.9rem 0.7rem; margin: 1rem 0; background: #f6fbf7; }
-.unknown-mode legend { font-weight: 600; font-size: 0.9rem; color: #2d6a4f; padding: 0 0.4rem; }
-.unknown-mode label { display: block; margin: 0.35rem 0; font-size: 0.9rem; cursor: pointer; }
 
 /* --- history grid: 不明セル --- */
 .history-cell.unknown { color: #999; font-style: italic; background: #f4f4f4; }

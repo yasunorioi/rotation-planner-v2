@@ -41,39 +41,6 @@ def test_dashboard_action_suggestions(app_client):
     assert "カバー率 0%" in r.text
 
 
-def test_plan_unknown_mode(app_client):
-    from app.db import connect
-    from app.optimizer_service import constraints_from_dict, load_unknown_mode
-
-    # 純関数: metadata_json のパースと Constraints への伝播
-    assert load_unknown_mode({"metadata_json": '{"unknown_mode": "safe"}'}) == "safe"
-    assert load_unknown_mode({"metadata_json": "{}"}) == "ignore"
-    assert load_unknown_mode({}) == "ignore"
-    assert load_unknown_mode({"metadata_json": "broken"}) == "ignore"  # 壊れても既定
-    assert constraints_from_dict({}, "safe").unknown_mode == "safe"
-    assert constraints_from_dict({}, "bogus").unknown_mode == "ignore"  # 不正値は既定
-
-    # UI 往復: 制約フォームから safe を保存 → 再取得で checked + DB 永続
-    with connect() as conn:
-        cur = conn.execute(
-            "INSERT INTO rotation_plans (user_id, name, start_year, end_year) "
-            "VALUES (1, 'P', '2026', '2028')"
-        )
-        pid = cur.lastrowid
-    r = app_client.post(
-        f"/plans/{pid}/constraints", data={"unknown_mode": "safe"}, follow_redirects=True
-    )
-    assert r.status_code == 200
-    assert 'value="safe" checked' in r.text
-    with connect() as conn:
-        plan = dict(
-            conn.execute(
-                "SELECT metadata_json FROM rotation_plans WHERE id = ?", (pid,)
-            ).fetchone()
-        )
-    assert load_unknown_mode(plan) == "safe"
-
-
 def test_history_cell_unknown(app_client):
     from app.db import connect
 

@@ -26,23 +26,6 @@ def load_constraints_dict(plan: dict) -> dict:
     return default_constraints_dict()
 
 
-def load_unknown_mode(plan: dict) -> str:
-    """plan.metadata_json の unknown_mode ('ignore'|'safe') を返す。既定 'ignore'。
-
-    'ignore' = 不明年には制約を課さない（予測を狭めない）。
-    'safe'   = 不明年はリスク作物（連作・休ませが必要な作物）を避ける。
-    """
-    raw = plan.get("metadata_json")
-    if raw:
-        try:
-            m = json.loads(raw).get("unknown_mode")
-            if m in ("ignore", "safe"):
-                return m
-        except (json.JSONDecodeError, AttributeError):
-            pass
-    return "ignore"
-
-
 def _to_optional_float(v) -> Optional[float]:
     if v is None or v == "":
         return None
@@ -61,7 +44,7 @@ def _to_int(v, default: int = 0) -> int:
         return default
 
 
-def constraints_from_dict(d: dict, unknown_mode: str = "ignore"):
+def constraints_from_dict(d: dict):
     """JSON 由来の dict から optimizer.Constraints を構築する。"""
     from rotation_planner.app import Constraints, FIXED_FORBIDDEN_TRANSITIONS
     return Constraints(
@@ -72,7 +55,6 @@ def constraints_from_dict(d: dict, unknown_mode: str = "ignore"):
         max_fields={k: (_to_int(v["max_fields"]) if v.get("max_fields") not in (None, "") else None)
                     for k, v in d.items()},
         forbidden_transitions=set(FIXED_FORBIDDEN_TRANSITIONS),
-        unknown_mode=unknown_mode if unknown_mode in ("ignore", "safe") else "ignore",
     )
 
 
@@ -162,7 +144,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
 
     constraints_dict = load_constraints_dict(plan)
     crops = list(constraints_dict.keys())
-    constraints = constraints_from_dict(constraints_dict, load_unknown_mode(plan))
+    constraints = constraints_from_dict(constraints_dict)
 
     planner = RotationPlannerORTools(opt_fields, past_years, future_years, crops, constraints)
     plan_dict, score, errors = planner.solve(timeout_seconds=timeout_seconds, district_grouping=False)

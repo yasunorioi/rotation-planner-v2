@@ -96,19 +96,14 @@ def optimize_plan(request: Request, user: CurrentUser, plan_id: int):
 
 @router.get("/{plan_id}/constraints")
 def constraints_editor(request: Request, user: CurrentUser, plan_id: int):
-    from app.optimizer_service import load_constraints_dict, load_unknown_mode
+    from app.optimizer_service import load_constraints_dict
 
     plan = _fetch_plan(user["id"], plan_id)
     constraints = load_constraints_dict(plan)
     return templates.TemplateResponse(
         request,
         "plans/constraints.html",
-        {
-            "user": user,
-            "plan": plan,
-            "constraints": constraints,
-            "unknown_mode": load_unknown_mode(plan),
-        },
+        {"user": user, "plan": plan, "constraints": constraints},
     )
 
 
@@ -145,28 +140,11 @@ async def save_constraints(
             "max_fields": _opt_int_or_none(max_fields_list[i] if i < len(max_fields_list) else ""),
         }
 
-    # 計画レベル設定: 不明（空欄履歴）の扱い。metadata_json にマージ保存。
-    unknown_mode = form.get("unknown_mode", "ignore")
-    if unknown_mode not in ("ignore", "safe"):
-        unknown_mode = "ignore"
-    try:
-        meta = _json.loads(plan.get("metadata_json") or "{}")
-        if not isinstance(meta, dict):
-            meta = {}
-    except (ValueError, TypeError):
-        meta = {}
-    meta["unknown_mode"] = unknown_mode
-
     with connect() as conn:
         conn.execute(
-            "UPDATE rotation_plans SET constraints_json = ?, metadata_json = ?, "
-            "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
-            (
-                _json.dumps(constraints, ensure_ascii=False),
-                _json.dumps(meta, ensure_ascii=False),
-                plan_id,
-                user["id"],
-            ),
+            "UPDATE rotation_plans SET constraints_json = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND user_id = ?",
+            (_json.dumps(constraints, ensure_ascii=False), plan_id, user["id"]),
         )
 
     return RedirectResponse(f"/plans/{plan_id}/constraints", status_code=303)
