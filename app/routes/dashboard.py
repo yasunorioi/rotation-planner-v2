@@ -83,6 +83,8 @@ def dashboard(request: Request, user: CurrentUser):
         "fields_with_history": fields_with_history,
         # 予測はロックしない。履歴があるほど精度が上がる、という位置づけ。
         "predict_ready": field_count > 0 and crop_count > 0,
+        # 運用フェーズ: 今年の防除を記録し始めたか（任意・継続作業）。
+        "records_started": records_year > 0,
     }
     return templates.TemplateResponse(
         request,

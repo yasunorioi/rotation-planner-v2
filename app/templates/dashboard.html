@@ -42,6 +42,16 @@
       </div>
       <a class="step-cta" href="/plans/">輪作計画へ</a>
     </li>
+    <li class="step {{ 'done' if setup.records_started else 'todo' }}">
+      <span class="step-no">5</span>
+      <div class="step-body">
+        <span class="step-title">防除を記録（運用）</span>
+        <span class="step-state">
+          {% if setup.records_started %}✓ 今年 {{ records_year }} 件{% else %}シーズン中に随時{% endif %}
+        </span>
+      </div>
+      <a class="step-cta" href="/pesticide-records/">防除記録へ</a>
+    </li>
   </ol>
   <p class="stepper-note">※ 作付履歴は借地・新規取得・前作他人などで欠けるのが普通です。空欄は「不明」として扱われ、<strong>予測はいつでも実行できます</strong>（履歴が多いほど精度が上がります）。</p>
 </section>
