@@ -27,12 +27,19 @@
   <div id="snapshot-result"></div>
 </div>
 
-<div class="optimize-toolbar">
-  <button hx-post="/plans/{{ plan.id }}/optimize"
-          hx-target="#optimize-result" hx-swap="innerHTML"
-          hx-indicator="#optimize-spinner">計画を生成</button>
-  <span id="optimize-spinner" class="htmx-indicator">… 最適化計算中（数秒待ち）</span>
+<div class="pinfill-help">
+  <p>
+    📌 <b>固定して埋める</b>：セルをクリックして作物を入れると「固定」されます。
+    <button hx-post="/plans/{{ plan.id }}/autofill"
+            hx-target="#plan-grid" hx-swap="innerHTML"
+            hx-indicator="#optimize-spinner" class="primary-action">自動で埋める</button>
+    を押すと、固定していない空きセルだけをソルバが最適化します。
+    結果が気に入らなければもう一度押すと別案（同点最適の入れ替え）が出ます。
+    <span id="optimize-spinner" class="htmx-indicator">… 最適化計算中（数秒待ち）</span>
+  </p>
 </div>
 
-<div id="optimize-result"></div>
+<div id="plan-grid">
+  {% include "plans/_grid.html" %}
+</div>
 {% endblock %}

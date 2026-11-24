@@ -50,6 +50,11 @@ def _migrate(db_path: Path) -> None:
         if cols and "fixed_crop" not in cols:
             conn.execute("ALTER TABLE fields ADD COLUMN fixed_crop TEXT")
             conn.commit()
+        # plan_details.is_pinned: 人が置いたセル(=ピン, 1) か ソルバ出力(=auto, 0) か
+        pd_cols = {r[1] for r in conn.execute("PRAGMA table_info(plan_details)")}
+        if pd_cols and "is_pinned" not in pd_cols:
+            conn.execute("ALTER TABLE plan_details ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
         # 新規テーブル + seed は schema を流す (CREATE TABLE IF NOT EXISTS と
         # INSERT OR IGNORE で構成されているので idempotent)
         schema = Path(__file__).resolve().parent.parent / "db_schema.sql"

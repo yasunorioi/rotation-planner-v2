@@ -90,6 +90,18 @@ form button[type="button"]:hover { background: #f0f0f0; }
 .rotation-result td.future-cell { background: #fffceb; font-weight: 500; }
 .rotation-result td.future-cell.empty { color: #ccc; background: #fafafa; font-weight: normal; }
 .rotation-result th.field-label { background: #f0f0f0; font-weight: normal; text-align: left; }
+/* pin-and-fill 計画セル */
+.plan-cell { min-width: 80px; cursor: pointer; vertical-align: middle; text-align: center; }
+.plan-cell:hover { outline: 2px solid #2d6a4f; outline-offset: -2px; }
+.plan-cell.auto { background: #fffceb; font-weight: 500; }
+.plan-cell.pinned { background: #d8f3dc; font-weight: 600; color: #1b4332; }
+.plan-cell.empty { background: #fafafa; color: #ccc; font-weight: normal; }
+.plan-cell.editing { padding: 0; background: #fffceb; cursor: default; }
+.plan-cell.editing form { display: flex; gap: 0.2rem; padding: 0.15rem; border: none; background: none; margin: 0; align-items: center; }
+.plan-cell.editing input[type="text"] { flex: 1 1 auto; min-width: 60px; padding: 0.3rem 0.5rem; border: 2px solid #2d6a4f; }
+.pinfill-help { margin: 0.75rem 0; padding: 0.5rem 0.75rem; background: #f0f7f2; border-left: 3px solid #2d6a4f; font-size: 0.9rem; }
+.primary-action { background: #2d6a4f; color: #fff; border: 1px solid #2d6a4f; border-radius: 4px; padding: 0.3rem 0.8rem; cursor: pointer; font-weight: 600; }
+.primary-action:hover { background: #1f4d36; }
 .warnings { margin-top: 1rem; }
 .warnings summary { cursor: pointer; color: #b91c1c; }
 .warnings ul { background: #fff5f5; padding: 0.5rem 1.5rem; border-left: 3px solid #b91c1c; }

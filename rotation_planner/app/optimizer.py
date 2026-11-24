@@ -420,8 +420,16 @@ class RotationPlannerORTools:
         return self.crop_to_idx.get(crop)
 
     def solve(self, timeout_seconds: int = 10, high_precision: bool = False,
-              district_grouping: bool = True) -> Tuple[Dict, float, List[str]]:
-        """OR-Toolsで最適化を実行"""
+              district_grouping: bool = True,
+              fixed_assignments: Optional[Dict[Tuple[int, str], str]] = None,
+              random_seed: Optional[int] = None) -> Tuple[Dict, float, List[str]]:
+        """OR-Toolsで最適化を実行
+
+        Args:
+            fixed_assignments: {(field_idx, 将来年名): 作物名} をハード制約として注入する
+                (pin-and-fill のピン / ほ場固定作物)。空きセルだけが最適化対象になる。
+            random_seed: CP-SAT のシード。同点最適の別解を引き当てる (再solve 連打) 用。
+        """
         model = cp_model.CpModel()
 
         # 決定変数
@@ -436,19 +444,40 @@ class RotationPlannerORTools:
             for y in range(self.num_future_years):
                 model.Add(sum(x[f, y, c] for c in range(self.num_crops)) == 1)
 
-        # 制約2: 連作禁止（将来年同士）
+        # 制約0: 固定割当 (ピン) をハード注入。未知の作物/年/ほ場は黙って無視する。
+        # ピンは「人の確定事実」なので、下の輪作制約 (連作/遷移/間隔/ビート禁止) で
+        # ピン同士が縛られると INFEASIBLE になる (例: 全年同一作物の永年牧草 vs 連作禁止)。
+        # → ピンが絡む制約は後段で「ピンが勝つ」ようにスキップする。
+        year_to_idx = {name: i for i, name in enumerate(self.future_years)}
+        pinned_fy: set = set()  # (field_idx, future_year_idx)
+        if fixed_assignments:
+            for (f_idx, year_name), crop_name in fixed_assignments.items():
+                y_idx = year_to_idx.get(year_name)
+                c_idx = self.crop_to_idx.get(crop_name)
+                if y_idx is None or c_idx is None:
+                    continue
+                if f_idx < 0 or f_idx >= self.num_fields:
+                    continue
+                model.Add(x[f_idx, y_idx, c_idx] == 1)
+                pinned_fy.add((f_idx, y_idx))
+
+        # 制約2: 連作禁止（将来年同士）。両端ともピンなら縛らない (ピン同士は人の確定)。
         for f in range(self.num_fields):
             for y in range(self.num_future_years - 1):
+                if (f, y) in pinned_fy and (f, y + 1) in pinned_fy:
+                    continue
                 for c in range(self.num_crops):
                     model.Add(x[f, y, c] + x[f, y + 1, c] <= 1)
 
-        # 制約3: 連作禁止（過去→将来1年目）
+        # 制約3: 連作禁止（過去→将来1年目）。将来1年目がピンなら人の選択を優先。
         for f in range(self.num_fields):
+            if (f, 0) in pinned_fy:
+                continue
             last_crop_idx = self.get_past_crop_idx(f, 1)
             if last_crop_idx is not None:
                 model.Add(x[f, 0, last_crop_idx] == 0)
 
-        # 制約4: 禁止遷移（将来年同士）
+        # 制約4: 禁止遷移（将来年同士）。両端ともピンならスキップ。
         for (from_crop, to_crop) in self.constraints.forbidden_transitions:
             from_idx = self.crop_to_idx.get(from_crop)
             to_idx = self.crop_to_idx.get(to_crop)
@@ -456,10 +485,14 @@ class RotationPlannerORTools:
                 continue
             for f in range(self.num_fields):
                 for y in range(self.num_future_years - 1):
+                    if (f, y) in pinned_fy and (f, y + 1) in pinned_fy:
+                        continue
                     model.Add(x[f, y, from_idx] + x[f, y + 1, to_idx] <= 1)
 
-        # 制約5: 禁止遷移（過去→将来1年目）
+        # 制約5: 禁止遷移（過去→将来1年目）。将来1年目がピンならスキップ。
         for f in range(self.num_fields):
+            if (f, 0) in pinned_fy:
+                continue
             last_crop_idx = self.get_past_crop_idx(f, 1)
             if last_crop_idx is not None:
                 last_crop = self.idx_to_crop[last_crop_idx]
@@ -469,7 +502,7 @@ class RotationPlannerORTools:
                         if to_idx is not None:
                             model.Add(x[f, 0, to_idx] == 0)
 
-        # 制約6: 間隔制約
+        # 制約6: 間隔制約。ピンが絡む項はスキップ (ピンを優先)。
         for c in range(self.num_crops):
             crop_name = self.idx_to_crop[c]
             min_gap = self.constraints.min_gap_years.get(crop_name, 0)
@@ -481,11 +514,15 @@ class RotationPlannerORTools:
                     past_idx = self.get_past_crop_idx(f, offset)
                     if past_idx == c:
                         for y in range(min(min_gap - offset + 1, self.num_future_years)):
+                            if (f, y) in pinned_fy:
+                                continue
                             model.Add(x[f, y, c] == 0)
                         break
 
                 for y1 in range(self.num_future_years):
                     for y2 in range(y1 + 1, min(y1 + min_gap + 1, self.num_future_years)):
+                        if (f, y1) in pinned_fy and (f, y2) in pinned_fy:
+                            continue
                         model.Add(x[f, y1, c] + x[f, y2, c] <= 1)
 
         # ソフト制約用の違反変数
@@ -540,6 +577,8 @@ class RotationPlannerORTools:
         for f_idx, fld in enumerate(self.fields):
             if fld.beet_forbidden:
                 for y in range(self.num_future_years):
+                    if (f_idx, y) in pinned_fy:
+                        continue  # ピンは人の確定事実 → ビート禁止より優先
                     if beet_idx is not None:
                         model.Add(x[f_idx, y, beet_idx] == 0)
                     if potato_idx is not None:
@@ -655,6 +694,10 @@ class RotationPlannerORTools:
         if high_precision:
             solver.parameters.num_search_workers = 4
             solver.parameters.linearization_level = 2
+        if random_seed is not None:
+            solver.parameters.random_seed = int(random_seed)
+            # 単一ワーカー + シードで探索経路を変え、同点最適の別解を引く
+            solver.parameters.num_search_workers = 1
         status = solver.Solve(model)
 
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:

@@ -77,21 +77,110 @@ def edit_plan_form(request: Request, user: CurrentUser, plan_id: int):
 
 @router.get("/{plan_id}")
 def plan_detail(request: Request, user: CurrentUser, plan_id: int):
+    from app.optimizer_service import load_plan_grid
+
     plan = _fetch_plan(user["id"], plan_id)
+    result = load_plan_grid(user["id"], plan)
+    crops = _plan_crop_suggestions(user["id"])
     return templates.TemplateResponse(
-        request, "plans/detail.html", {"user": user, "plan": plan}
+        request, "plans/detail.html",
+        {"user": user, "plan": plan, "result": result, "crops": crops},
     )
 
 
 @router.post("/{plan_id}/optimize", response_class=HTMLResponse)
 def optimize_plan(request: Request, user: CurrentUser, plan_id: int):
-    plan = _fetch_plan(user["id"], plan_id)
-    from app.optimizer_service import run_optimization_for_plan
+    """後方互換: 旧「計画を生成」。pin-and-fill の autofill にそのまま委譲。"""
+    return autofill_plan(request, user, plan_id)
 
-    result = run_optimization_for_plan(user["id"], plan)
+
+@router.post("/{plan_id}/autofill", response_class=HTMLResponse)
+def autofill_plan(request: Request, user: CurrentUser, plan_id: int):
+    """ピンを尊重して空きセルを最適化し、結果を plan_details に保存して返す。
+    再solve はシードを変えて同点最適の別案を引く。"""
+    import random as _random
+
+    plan = _fetch_plan(user["id"], plan_id)
+    from app.optimizer_service import persist_autofill
+
+    seed = _random.randint(1, 2_000_000_000)
+    result = persist_autofill(user["id"], plan, random_seed=seed)
+    crops = _plan_crop_suggestions(user["id"])
     return templates.TemplateResponse(
-        request, "plans/_result.html", {"plan": plan, "result": result}
+        request, "plans/_grid.html",
+        {"plan": plan, "result": result, "crops": crops},
     )
+
+
+def _plan_crop_suggestions(user_id: int) -> list[str]:
+    from app.routes.history import _crop_suggestions
+
+    return _crop_suggestions(user_id)
+
+
+@router.get("/{plan_id}/cell", response_class=HTMLResponse)
+def plan_cell_view(request: Request, user: CurrentUser, plan_id: int,
+                   field_id: int, year: str):
+    """セルを表示モードに戻す (キャンセル / 保存後)。"""
+    from app.optimizer_service import load_plan_grid
+
+    plan = _fetch_plan(user["id"], plan_id)
+    result = load_plan_grid(user["id"], plan)
+    code = _code_for_field(user["id"], field_id)
+    crop = result["grid"].get((code, year), "") if code else ""
+    pinned = (code, year) in result.get("pinned", set())
+    return templates.TemplateResponse(
+        request, "plans/_cell.html",
+        {"plan_id": plan_id, "field_id": field_id, "year": year,
+         "crop": crop, "pinned": pinned},
+    )
+
+
+@router.get("/{plan_id}/cell/edit", response_class=HTMLResponse)
+def plan_cell_edit(request: Request, user: CurrentUser, plan_id: int,
+                   field_id: int, year: str):
+    from app.optimizer_service import load_plan_grid
+
+    plan = _fetch_plan(user["id"], plan_id)
+    result = load_plan_grid(user["id"], plan)
+    code = _code_for_field(user["id"], field_id)
+    crop = result["grid"].get((code, year), "") if code else ""
+    crops = _plan_crop_suggestions(user["id"])
+    return templates.TemplateResponse(
+        request, "plans/_cell_edit.html",
+        {"plan_id": plan_id, "field_id": field_id, "year": year,
+         "crop": crop, "crops": crops},
+    )
+
+
+@router.post("/{plan_id}/cell", response_class=HTMLResponse)
+def plan_cell_save(request: Request, user: CurrentUser, plan_id: int,
+                   field_id: int = Form(...), year: str = Form(...),
+                   crop: str = Form("")):
+    """セルを人が固定 (ピン)。空なら削除。保存後は表示セルを返す。"""
+    _fetch_plan(user["id"], plan_id)
+    from app.optimizer_service import set_plan_cell
+    from app.crop_service import normalize_crop_name
+
+    set_plan_cell(user["id"], plan_id, field_id, year, crop)
+    stored = ""
+    if crop.strip():
+        with connect() as conn:
+            stored = normalize_crop_name(conn, crop.strip())
+    return templates.TemplateResponse(
+        request, "plans/_cell.html",
+        {"plan_id": plan_id, "field_id": field_id, "year": year,
+         "crop": stored, "pinned": bool(stored)},
+    )
+
+
+def _code_for_field(user_id: int, field_id: int) -> str | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT field_code FROM fields WHERE id = ? AND user_id = ?",
+            (field_id, user_id),
+        ).fetchone()
+    return row["field_code"] if row else None
 
 
 @router.get("/{plan_id}/constraints")
@@ -209,12 +298,12 @@ def snapshot_plan(
     """現在の計画結果を plan_snapshots テーブルに追加。"""
     from datetime import datetime as _dt
     import json as _json
-    from app.optimizer_service import run_optimization_for_plan
+    from app.optimizer_service import load_plan_grid
 
     plan = _fetch_plan(user["id"], plan_id)
-    result = run_optimization_for_plan(user["id"], plan)
+    result = load_plan_grid(user["id"], plan)
     if not result.get("ok"):
-        raise HTTPException(400, result.get("message", "最適化失敗"))
+        raise HTTPException(400, result.get("message", "計画がありません"))
 
     serializable_grid = {f"{code}|{y}": crop for (code, y), crop in result["grid"].items()}
     data = {
@@ -365,12 +454,12 @@ def apply_plan_year_to_history(
     plan_id: int,
     year: str = Form(...),
 ):
-    """指定した将来年の計画結果を crop_history に upsert する。
+    """指定した将来年の計画結果 (永続グリッド) を crop_history に upsert する。
     年が past_years に入っている場合や、grid に該当年データがない場合はエラー。"""
-    from app.optimizer_service import run_optimization_for_plan
+    from app.optimizer_service import load_plan_grid
 
     plan = _fetch_plan(user["id"], plan_id)
-    result = run_optimization_for_plan(user["id"], plan)
+    result = load_plan_grid(user["id"], plan)
     if not result.get("ok"):
         raise HTTPException(400, result.get("message", "最適化失敗"))
     if year not in result["future_years"]:
@@ -407,11 +496,11 @@ def apply_plan_year_to_history(
 @router.get("/{plan_id}/result.pdf")
 def export_result_pdf(user: CurrentUser, plan_id: int):
     from fastapi.responses import Response
-    from app.optimizer_service import run_optimization_for_plan
+    from app.optimizer_service import load_plan_grid
     from app.pdf_service import generate_plan_pdf
 
     plan = _fetch_plan(user["id"], plan_id)
-    result = run_optimization_for_plan(user["id"], plan)
+    result = load_plan_grid(user["id"], plan)
     pdf_bytes = generate_plan_pdf(plan, result)
     return Response(
         pdf_bytes,
@@ -424,10 +513,10 @@ def export_result_pdf(user: CurrentUser, plan_id: int):
 def export_result_csv(user: CurrentUser, plan_id: int):
     import io, csv
     from fastapi.responses import StreamingResponse
-    from app.optimizer_service import run_optimization_for_plan
+    from app.optimizer_service import load_plan_grid
 
     plan = _fetch_plan(user["id"], plan_id)
-    result = run_optimization_for_plan(user["id"], plan)
+    result = load_plan_grid(user["id"], plan)
     buf = io.StringIO()
     w = csv.writer(buf)
     if not result.get("ok"):

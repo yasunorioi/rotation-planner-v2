@@ -344,8 +344,8 @@ def test_plan_detail_page(app_client):
     r = app_client.get(f"/plans/{plan_id}")
     assert r.status_code == 200
     assert "詳細テスト" in r.text
-    assert "計画を生成" in r.text
-    assert f"/plans/{plan_id}/optimize" in r.text
+    assert "自動で埋める" in r.text
+    assert f"/plans/{plan_id}/autofill" in r.text
 
 
 def test_optimize_empty_fields_returns_error(app_client):
@@ -1144,7 +1144,9 @@ def test_apply_plan_year_to_history(app_client):
     r = app_client.post("/plans/", data={"name": "適用テスト", "start_year": "R8", "end_year": "R9"})
     import re
     pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
-    # 適用
+    # まず自動で埋める (永続グリッドを作る) → それを履歴へ適用
+    r = app_client.post(f"/plans/{pid}/autofill")
+    assert r.status_code == 200
     r = app_client.post(
         f"/plans/{pid}/apply-to-history",
         data={"year": "R8"},
@@ -1305,12 +1307,70 @@ def test_optimizer_overrides_with_fixed_crop(app_client):
     pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
     r = app_client.post(f"/plans/{pid}/optimize")
     assert r.status_code == 200
-    # 固定作物ほ場 1 件 とメッセージに出る
-    assert "固定作物ほ場 1 件" in r.text
+    # fixed_crop は全将来年ピンとして注入される (R8+R9 の 2 セル)
+    assert "固定セル 2 個" in r.text
     # FIX1 の R8/R9 セルは「牧草」
     # ピボット表の FIX1 行を確認
     row = re.search(r'class="field-label">FIX1</th>.+?</tr>', r.text, re.DOTALL).group(0)
     assert row.count("牧草") >= 2  # R8 + R9
+
+
+def test_autofill_persists_plan_grid(app_client):
+    """autofill を実行すると plan_details に将来年セルが保存される。"""
+    _make_field(app_client, "PF1")
+    _make_field(app_client, "PF2")
+    r = app_client.post("/plans/", data={"name": "P", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # 初期は計画なし
+    r = app_client.get(f"/plans/{pid}")
+    assert "まだ計画がありません" in r.text
+    # 自動で埋める
+    r = app_client.post(f"/plans/{pid}/autofill")
+    assert r.status_code == 200
+    # 再表示で solve せずとも将来セルが残っている (永続化された)
+    r = app_client.get(f"/plans/{pid}")
+    assert "まだ計画がありません" not in r.text
+    # auto セル (📌 でない) が存在する
+    assert 'class="plan-cell auto"' in r.text
+
+
+def test_pinned_cell_survives_resolve(app_client):
+    """人が固定したセルは autofill 連打 (再solve) で維持される。"""
+    fid = _make_field(app_client, "PIN1")
+    _make_field(app_client, "PIN2")
+    r = app_client.post("/plans/", data={"name": "P", "start_year": "R8", "end_year": "R10"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    # PIN1 の R8 を「だいず」に固定
+    r = app_client.post(f"/plans/{pid}/cell",
+                        data={"field_id": fid, "year": "R8", "crop": "だいず"})
+    assert r.status_code == 200
+    assert "📌" in r.text and "だいず" in r.text
+    # 何度 autofill しても R8 は だいず のまま (ピンがハード注入される)
+    for _ in range(3):
+        app_client.post(f"/plans/{pid}/autofill")
+    r = app_client.get(f"/plans/{pid}")
+    row = re.search(r'class="field-label">PIN1</th>.+?</tr>', r.text, re.DOTALL).group(0)
+    # R8 セルは pinned かつ だいず
+    assert "pinned" in row
+    assert "だいず" in row
+
+
+def test_pin_clear_removes_cell(app_client):
+    """空文字でセル保存するとピンが消える。"""
+    fid = _make_field(app_client, "CLR1")
+    r = app_client.post("/plans/", data={"name": "P", "start_year": "R8", "end_year": "R9"})
+    import re
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    app_client.post(f"/plans/{pid}/cell", data={"field_id": fid, "year": "R8", "crop": "だいず"})
+    # 消す
+    r = app_client.post(f"/plans/{pid}/cell", data={"field_id": fid, "year": "R8", "crop": ""})
+    assert r.status_code == 200
+    assert "📌" not in r.text
+    # DB 上も消えている
+    r = app_client.get(f"/plans/{pid}")
+    assert "まだ計画がありません" in r.text
 
 
 def test_field_form_district_datalist(app_client):

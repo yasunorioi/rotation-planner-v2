@@ -1,0 +1,4 @@
+<td class="plan-cell {% if pinned %}pinned{% elif not crop %}empty{% else %}auto{% endif %}"
+    hx-get="/plans/{{ plan_id }}/cell/edit?field_id={{ field_id }}&year={{ year }}"
+    hx-target="this" hx-swap="outerHTML"
+    title="{% if pinned %}固定セル (クリックで編集/解除){% else %}自動 (クリックで固定){% endif %}">{% if pinned %}📌 {% endif %}{{ crop or "—" }}</td>

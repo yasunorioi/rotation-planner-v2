@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS plan_details (
     field_id INTEGER NOT NULL REFERENCES fields(id) ON DELETE CASCADE,
     year TEXT NOT NULL,
     crop TEXT NOT NULL,
+    is_pinned INTEGER NOT NULL DEFAULT 0,  -- 1=人が固定(ピン) / 0=ソルバ自動(auto)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(plan_id, field_id, year)
 );
