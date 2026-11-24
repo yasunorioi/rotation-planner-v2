@@ -157,20 +157,15 @@ def plan_cell_edit(request: Request, user: CurrentUser, plan_id: int,
 def plan_cell_save(request: Request, user: CurrentUser, plan_id: int,
                    field_id: int = Form(...), year: str = Form(...),
                    crop: str = Form("")):
-    """セルを人が固定 (ピン)。空なら削除。保存後は表示セルを返す。"""
-    _fetch_plan(user["id"], plan_id)
-    from app.optimizer_service import set_plan_cell
-    from app.crop_service import normalize_crop_name
+    """セルを人が固定 (ピン)。空なら削除。保存後はグリッド全体を再描画して
+    サマリ・固定セル数も即時更新する (再solve はしない)。"""
+    from app.optimizer_service import set_plan_cell, load_plan_grid
 
+    plan = _fetch_plan(user["id"], plan_id)
     set_plan_cell(user["id"], plan_id, field_id, year, crop)
-    stored = ""
-    if crop.strip():
-        with connect() as conn:
-            stored = normalize_crop_name(conn, crop.strip())
+    result = load_plan_grid(user["id"], plan)
     return templates.TemplateResponse(
-        request, "plans/_cell.html",
-        {"plan_id": plan_id, "field_id": field_id, "year": year,
-         "crop": stored, "pinned": bool(stored)},
+        request, "plans/_grid.html", {"plan": plan, "result": result},
     )
 
 

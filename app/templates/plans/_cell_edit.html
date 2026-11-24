@@ -1,5 +1,5 @@
 <td class="plan-cell editing">
-  <form hx-post="/plans/{{ plan_id }}/cell" hx-target="closest td" hx-swap="outerHTML">
+  <form hx-post="/plans/{{ plan_id }}/cell" hx-target="#plan-grid" hx-swap="innerHTML">
     <input type="hidden" name="field_id" value="{{ field_id }}">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="text" name="crop" value="{{ crop }}" autofocus
