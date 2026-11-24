@@ -99,7 +99,7 @@ def constraints_editor(request: Request, user: CurrentUser, plan_id: int):
     from app.optimizer_service import load_constraints_dict
 
     plan = _fetch_plan(user["id"], plan_id)
-    constraints = load_constraints_dict(plan)
+    constraints = load_constraints_dict(plan, user["id"])
     return templates.TemplateResponse(
         request,
         "plans/constraints.html",
@@ -164,7 +164,7 @@ async def add_constraint_crop(
     new_crop = new_crop.strip()
     if not new_crop:
         return RedirectResponse(f"/plans/{plan_id}/constraints", status_code=303)
-    constraints = load_constraints_dict(plan)
+    constraints = load_constraints_dict(plan, user["id"])
     if new_crop not in constraints:
         constraints[new_crop] = {
             "min_ha": None, "cap_ha": None,
@@ -190,7 +190,7 @@ async def remove_constraint_crop(
     import json as _json
 
     plan = _fetch_plan(user["id"], plan_id)
-    constraints = load_constraints_dict(plan)
+    constraints = load_constraints_dict(plan, user["id"])
     constraints.pop(crop, None)
     with connect() as conn:
         conn.execute(

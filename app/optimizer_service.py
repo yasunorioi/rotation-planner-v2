@@ -9,21 +9,52 @@ from typing import Optional
 from app.db import connect
 
 
-def default_constraints_dict() -> dict:
-    """DEFAULT_CONSTRAINTS のコピー (編集可能な dict)。"""
+_UNCONSTRAINED = {
+    "min_ha": None, "cap_ha": None,
+    "min_gap_years": 0, "min_fields": 0, "max_fields": None,
+}
+
+
+def _fetch_user_crop_names(user_id: int) -> list[str]:
+    """ユーザーが「作物を選ぶ」で選択した作物名 (user_crops)。未選択なら空リスト。"""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT COALESCE(uc.custom_name, cm.name) AS name "
+            "FROM user_crops uc "
+            "JOIN crop_master cm ON cm.id = uc.parent_crop_id "
+            "WHERE uc.user_id = ? AND cm.is_active = 1 "
+            "ORDER BY cm.display_order, name",
+            (user_id,),
+        ).fetchall()
+    return [r["name"] for r in rows if r["name"]]
+
+
+def default_constraints_dict(user_id: int | None = None) -> dict:
+    """既定の作物集合 + 制約。
+
+    user_id を渡し、その人が「作物を選ぶ」で作物を選んでいれば、その作物だけに
+    絞った制約 dict を返す (DEFAULT_CONSTRAINTS に無い作物は無制約)。未選択なら
+    DEFAULT_CONSTRAINTS をそのまま返す。
+    """
     from rotation_planner.app import DEFAULT_CONSTRAINTS
-    return {crop: dict(values) for crop, values in DEFAULT_CONSTRAINTS.items()}
+    base = {crop: dict(values) for crop, values in DEFAULT_CONSTRAINTS.items()}
+    if user_id is None:
+        return base
+    names = _fetch_user_crop_names(user_id)
+    if not names:
+        return base
+    return {name: dict(base.get(name, _UNCONSTRAINED)) for name in names}
 
 
-def load_constraints_dict(plan: dict) -> dict:
-    """plan.constraints_json があればそれを、なければデフォルトを返す。"""
+def load_constraints_dict(plan: dict, user_id: int | None = None) -> dict:
+    """plan.constraints_json があればそれを、なければ既定 (user_crops 反映) を返す。"""
     raw = plan.get("constraints_json")
     if raw:
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
             pass
-    return default_constraints_dict()
+    return default_constraints_dict(user_id)
 
 
 def _to_optional_float(v) -> Optional[float]:
@@ -142,7 +173,7 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
         if f["fixed_crop"]:
             fixed_by_code[f["field_code"]] = f["fixed_crop"]
 
-    constraints_dict = load_constraints_dict(plan)
+    constraints_dict = load_constraints_dict(plan, user_id)
     crops = list(constraints_dict.keys())
     constraints = constraints_from_dict(constraints_dict)
 

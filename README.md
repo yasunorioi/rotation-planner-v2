@@ -14,6 +14,21 @@ uvicorn app.main:app --reload
 
 ブラウザで `http://localhost:8000/` を開くと Basic auth ダイアログ。
 
+### FAMIC 作物データの取込 (任意だが推奨)
+
+作物名の原点は農薬登録 (FAMIC) の作物名。`/my-crops` で FAMIC から作物を検索・採用できる。
+
+FAMIC の公開データ (https://www.acis.famic.go.jp/ddownload/index.htm) から
+`登録基本部.xls` / `登録適用部一.xls` / `登録適用部二.xls` を取得し、
+`data/famic/` に `basic.xls` / `usage1.xls` / `usage2.xls` として置いてから:
+
+```bash
+python -m scripts.import_famic
+```
+
+未取込でも動作する (その場合 `/my-crops` は「マスタから追加」のみ)。
+`data/famic/` は git 管理外。
+
 ## 構成
 
 - `db_schema.sql` — v1 から流用したスキーマ (ブループリント)

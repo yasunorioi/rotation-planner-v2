@@ -1,0 +1,53 @@
+<div id="my-crops-list">
+  <section class="my-crops-selected">
+    <h3>あなたの作物 <small class="hint">{{ selected|length }} 品目</small></h3>
+    {% if not selected %}
+    <p class="hint">まだ作物が選ばれていません。上の FAMIC 検索か、下の「マスタから追加」で選んでください。</p>
+    {% else %}
+    <ul class="crop-rows">
+      {% for crop in selected %}
+      <li class="crop-row">
+        <div class="crop-row-head">
+          <span class="crop-name">{{ crop.name }}</span>
+          <button class="link-danger"
+                  hx-post="/my-crops/remove/{{ crop.id }}"
+                  hx-target="#my-crops-list" hx-swap="outerHTML"
+                  title="この作物を外す">外す</button>
+        </div>
+        <div class="crop-aliases">
+          <span class="alias-label">別名:</span>
+          {% for a in crop.aliases %}
+          <span class="alias-chip">{{ a.alias }}
+            <button hx-delete="/my-crops/aliases/{{ a.id }}"
+                    hx-target="#my-crops-list" hx-swap="outerHTML"
+                    title="別名を削除">×</button>
+          </span>
+          {% else %}
+          <span class="hint">なし</span>
+          {% endfor %}
+          <form class="alias-add" hx-post="/my-crops/{{ crop.id }}/aliases"
+                hx-target="#my-crops-list" hx-swap="outerHTML">
+            <input type="text" name="alias" placeholder="俗称を追加（例: ビート）"
+                   size="14" autocomplete="off" required>
+            <button type="submit">＋</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  {% if unselected %}
+  <section class="my-crops-master">
+    <h3>マスタから追加 <small class="hint">登録済みの作物</small></h3>
+    <div class="quick-add">
+      {% for crop in unselected %}
+      <button class="chip-add"
+              hx-post="/my-crops/add/{{ crop.id }}"
+              hx-target="#my-crops-list" hx-swap="outerHTML">＋ {{ crop.name }}</button>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>

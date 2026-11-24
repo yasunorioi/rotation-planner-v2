@@ -326,6 +326,21 @@ CREATE TABLE IF NOT EXISTS user_crops (
 );
 
 -- ═══════════════════════════════════════════════════════════════
+-- 14b. 作物の別名（俗称 → canonical の一級マッピング）
+-- 「てんさい = ビート = 砂糖大根」のような俗称を crop_master に紐づけて保持する。
+-- user_crops.custom_name に埋める方式だと検索に引っかからない謎データ化するため、
+-- 別名は検索可能な一級テーブルに置き、作物名の正規化 (別名→canonical) に使う。
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS crop_alias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    crop_id INTEGER NOT NULL,
+    alias TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (crop_id) REFERENCES crop_master(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_crop_alias_crop ON crop_alias(crop_id);
+
+-- ═══════════════════════════════════════════════════════════════
 -- 15. 農薬登録情報（FAMICデータ）
 -- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS pesticide_registry (

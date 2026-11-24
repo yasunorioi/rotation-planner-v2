@@ -1,0 +1,22 @@
+{% if not q %}
+<p class="hint">作物名を入力すると候補が出ます。</p>
+{% elif not results %}
+<p class="hint">「{{ q }}」に一致する FAMIC 作物名はありません。</p>
+{% else %}
+<ul class="famic-list">
+  {% for name in results %}
+  <li>
+    <span class="famic-name">{{ name }}</span>
+    {% if name in existing %}
+    <button class="link"
+            hx-post="/my-crops/famic/add" hx-vals='{"name": {{ name|tojson }}}'
+            hx-target="#my-crops-list" hx-swap="outerHTML">選択に追加（登録済み）</button>
+    {% else %}
+    <button class="chip-add"
+            hx-post="/my-crops/famic/add" hx-vals='{"name": {{ name|tojson }}}'
+            hx-target="#my-crops-list" hx-swap="outerHTML">＋ 追加</button>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

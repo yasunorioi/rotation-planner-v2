@@ -40,14 +40,16 @@
 - **crop_master** — name UNIQUE, category, family, display_order, is_active
   - seed 10 件 (小麦 春播/秋播, だいず, てんさい, ばれいしょ, あずき, にんじん, かぼちゃ, キャベツ, だいこん)
 - **user_crops** — user_id FK, parent_crop_id FK crop_master, custom_name
-  - 現状未使用 (v2 では crop_master を直接管理)
+  - ユーザーが作る作物の選択 (`/my-crops`)。輪作計画の既定の作物集合になる (constraints_json 未設定時)。custom_name は別名には使わない (→ crop_alias)
+- **crop_alias** — crop_id FK crop_master CASCADE, alias UNIQUE
+  - 俗称 → canonical の一級マッピング (てんさい = ビート = 砂糖大根)。履歴/ほ場の作物名入力を normalize_crop_name で canonical に畳み込む
 
 ### 農薬系
 - **pesticide_masters** — org_id FK, name, crop, category, manufacturer, active_ingredient, usage_timing, dilution_rate, application_method, safety_interval, notes
 - **pesticide_records** — user_id FK CASCADE, field_id FK CASCADE, spray_date, pesticide_name, pesticide_id FK pesticide_registry SET NULL, dilution_rate, spray_amount, spray_unit, photo_path, notes
 - **pesticide_registry** — registration_number UNIQUE, name, category, type, active_ingredient, manufacturer, formulation
-  - FAMIC 由来のグローバル農薬登録情報 (v2 では未使用)
-- **pesticide_usage** — FAMIC 適用情報 (v2 では未使用)
+  - FAMIC 登録基本部 由来のグローバル農薬登録情報。`scripts/import_famic.py` で取込
+- **pesticide_usage** — FAMIC 適用情報 (登録適用部)。**作物名の原点** — `/my-crops` の FAMIC 検索はこの DISTINCT crop を引く
 
 ## FK の CASCADE ポリシー
 

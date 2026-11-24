@@ -16,6 +16,7 @@ _NAME_ALIASES = {"ほ場名", "圃場名", "name"}
 _YEAR_PATTERN = re.compile(r"^R\d+$")
 
 from app.auth import CurrentUser
+from app.crop_service import normalize_crop_name
 from app.db import connect
 from rotation_planner.common.year_utils import generate_year_choices
 
@@ -201,6 +202,10 @@ async def import_history(
                 if col_idx >= len(row):
                     continue
                 crop = row[col_idx].strip()
+                if crop in ("不明", "UNKNOWN"):
+                    crop = "UNKNOWN"
+                else:
+                    crop = normalize_crop_name(conn, crop)
                 if crop:
                     conn.execute(
                         "INSERT INTO crop_history (field_id, year, crop) VALUES (?, ?, ?) "
@@ -318,6 +323,8 @@ def cell_save(
         crop = "UNKNOWN"
     with connect() as conn:
         _ensure_field_owned(conn, user["id"], field_id)
+        # 俗称 (ビート等) を canonical 作物名に畳み込んでから保存する。
+        crop = normalize_crop_name(conn, crop)
         if crop:
             conn.execute(
                 "INSERT INTO crop_history (field_id, year, crop) VALUES (?, ?, ?) "

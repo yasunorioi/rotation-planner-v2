@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response, Streamin
 from fastapi.templating import Jinja2Templates
 
 from app.auth import CurrentUser
+from app.crop_service import normalize_crop_name
 from app.db import connect
 
 SAPPORO = [43.0642, 141.3469]  # ポリゴン未登録時のデフォルト中心
@@ -166,11 +167,12 @@ def create_field(
     notes: str = Form(""),
 ):
     with connect() as conn:
+        fixed_crop = normalize_crop_name(conn, fixed_crop)
         cursor = conn.execute(
             "INSERT INTO fields (user_id, field_code, district, name, area_ha, beet_forbidden, fixed_crop, notes) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (user["id"], field_code, district or None, name or None, area_ha,
-             int(beet_forbidden), fixed_crop.strip() or None, notes or None),
+             int(beet_forbidden), fixed_crop or None, notes or None),
         )
         field_id = cursor.lastrowid
     field = _fetch_field(user["id"], field_id)
@@ -231,11 +233,12 @@ def update_field(
     notes: str = Form(""),
 ):
     with connect() as conn:
+        fixed_crop = normalize_crop_name(conn, fixed_crop)
         result = conn.execute(
             "UPDATE fields SET field_code=?, district=?, name=?, area_ha=?, beet_forbidden=?, "
             "fixed_crop=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
             (field_code, district or None, name or None, area_ha, int(beet_forbidden),
-             fixed_crop.strip() or None, notes or None,
+             fixed_crop or None, notes or None,
              field_id, user["id"]),
         )
         if result.rowcount == 0:

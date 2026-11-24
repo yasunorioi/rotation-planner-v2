@@ -12,7 +12,7 @@
         <span class="step-title">作物を選ぶ</span>
         <span class="step-state">{% if setup.crops_done %}✓ {{ crop_count }} 品目{% else %}まだ未選択{% endif %}</span>
       </div>
-      <a class="step-cta" href="/crop-masters/">{% if setup.crops_done %}編集{% else %}作物を選ぶ{% endif %}</a>
+      <a class="step-cta" href="/my-crops/">{% if setup.crops_done %}選び直す{% else %}作物を選ぶ{% endif %}</a>
     </li>
     <li class="step {{ 'done' if setup.fields_done else 'todo' }}">
       <span class="step-no">2</span>

@@ -1899,3 +1899,183 @@ def test_polygon_404_for_other_user_field(app_client):
     conn.close()
     app_client.auth = ("other", "other")
     assert app_client.get(f"/fields/{fid}/polygon").status_code == 404
+
+
+
+# =============================================================================
+# 作物を選ぶ (/my-crops) — FAMIC 原点 + user_crops + 別名(crop_alias)
+# =============================================================================
+
+def _seed_famic(crops: list[str]) -> None:
+    """テスト用 DB に FAMIC 適用情報(pesticide_usage)を最小限 seed する。"""
+    import os
+    import sqlite3
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute(
+            "INSERT OR IGNORE INTO pesticide_registry (id, registration_number, name) "
+            "VALUES (1, 'TEST-1', 'テスト農薬')"
+        )
+        for c in crops:
+            conn.execute(
+                "INSERT INTO pesticide_usage (pesticide_id, crop) VALUES (1, ?)", (c,)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _crop_master_id(name: str) -> int:
+    import os
+    import sqlite3
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        row = conn.execute("SELECT id FROM crop_master WHERE name = ?", (name,)).fetchone()
+    finally:
+        conn.close()
+    assert row is not None, f"crop_master に {name} が無い"
+    return row[0]
+
+
+def _user_crop_names() -> set[str]:
+    import os
+    import sqlite3
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        rows = conn.execute(
+            "SELECT cm.name FROM user_crops uc JOIN crop_master cm ON cm.id = uc.parent_crop_id"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {r[0] for r in rows}
+
+
+def test_my_crops_page_renders(app_client):
+    r = app_client.get("/my-crops/")
+    assert r.status_code == 200
+    # マスタから追加の候補に seed 作物が出る
+    assert "だいず" in r.text
+    # FAMIC 未取込なら案内が出る
+    assert "FAMIC データが未取込" in r.text or "FAMIC から探して追加" in r.text
+
+
+def test_my_crops_add_remove_from_master(app_client):
+    cid = _crop_master_id("だいず")
+    r = app_client.post(f"/my-crops/add/{cid}")
+    assert r.status_code == 200
+    assert _user_crop_names() == {"だいず"}
+    # 選択済みは「あなたの作物」に出る
+    assert "だいず" in r.text
+    r = app_client.post(f"/my-crops/remove/{cid}")
+    assert _user_crop_names() == set()
+
+
+def test_my_crops_famic_search_and_add(app_client):
+    _seed_famic(["てんさい", "てんさい(直播栽培)", "ばれいしょ"])
+    # 検索
+    r = app_client.get("/my-crops/famic", params={"q": "てんさい"})
+    assert r.status_code == 200
+    assert "てんさい(直播栽培)" in r.text
+    # FAMIC から追加（crop_master に無い名前も採用できる）
+    r = app_client.post("/my-crops/famic/add", data={"name": "てんさい(直播栽培)"})
+    assert r.status_code == 200
+    assert "てんさい(直播栽培)" in _user_crop_names()
+    # crop_master にも canonical として入る
+    assert _crop_master_id("てんさい(直播栽培)") > 0
+
+
+def test_my_crops_famic_add_rejects_non_famic(app_client):
+    _seed_famic(["てんさい"])
+    r = app_client.post("/my-crops/famic/add", data={"name": "架空作物XYZ"})
+    assert r.status_code == 400
+
+
+def test_crop_alias_add_and_delete(app_client):
+    cid = _crop_master_id("てんさい")
+    app_client.post(f"/my-crops/add/{cid}")
+    r = app_client.post(f"/my-crops/{cid}/aliases", data={"alias": "ビート"})
+    assert r.status_code == 200
+    assert "ビート" in r.text
+    import os
+    import sqlite3
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        row = conn.execute("SELECT id FROM crop_alias WHERE alias = 'ビート'").fetchone()
+        assert row is not None
+        alias_id = row[0]
+    finally:
+        conn.close()
+    r = app_client.delete(f"/my-crops/aliases/{alias_id}")
+    assert r.status_code == 200
+    # 別名チップ（>ビート<）は消える（プレースホルダ文言の「ビート」は別物）
+    assert ">ビート" not in r.text
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM crop_alias").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_crop_alias_normalizes_history_cell(app_client):
+    # てんさい に別名 ビート を登録
+    cid = _crop_master_id("てんさい")
+    app_client.post(f"/my-crops/add/{cid}")
+    app_client.post(f"/my-crops/{cid}/aliases", data={"alias": "ビート"})
+    # ほ場 + 履歴セルに俗称「ビート」で入力 → canonical「てんさい」で保存される
+    fid = _make_field(app_client, "ALS1")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "ビート"})
+    import os
+    import sqlite3
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        row = conn.execute(
+            "SELECT crop FROM crop_history WHERE field_id = ? AND year = 'R7'", (fid,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == "てんさい"
+
+
+def test_crop_alias_normalizes_fixed_crop(app_client):
+    cid = _crop_master_id("てんさい")
+    app_client.post(f"/my-crops/{cid}/aliases", data={"alias": "ビート"})
+    # ほ場の固定作物に俗称 → canonical 化
+    import re
+    r = app_client.post("/fields/", data={
+        "field_code": "FXC1", "name": "畑", "area_ha": "1.0", "fixed_crop": "ビート",
+    })
+    fid = int(re.search(r'id="field-(\d+)"', r.text).group(1))
+    import os
+    import sqlite3
+    conn = sqlite3.connect(os.environ["ROTATION_DB"])
+    try:
+        row = conn.execute("SELECT fixed_crop FROM fields WHERE id = ?", (fid,)).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == "てんさい"
+
+
+def test_user_crops_restrict_optimizer(app_client):
+    # だいず だけ選択 → 計画は だいず だけで組まれる
+    cid = _crop_master_id("だいず")
+    app_client.post(f"/my-crops/add/{cid}")
+    app_client.post("/fields/", data={"field_code": "UC1", "name": "畑", "area_ha": "1.0"})
+    import re
+    r = app_client.post("/plans/", data={"name": "UCPlan", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.post(f"/plans/{pid}/optimize")
+    assert r.status_code == 200
+    assert "だいず" in r.text
+    assert "てんさい" not in r.text
+
+
+def test_constraints_editor_reflects_user_crops(app_client):
+    cid = _crop_master_id("だいず")
+    app_client.post(f"/my-crops/add/{cid}")
+    import re
+    r = app_client.post("/plans/", data={"name": "CE", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{pid}/constraints")
+    crops = set(re.findall(r'<input type="hidden" name="crop" value="([^"]+)">', r.text))
+    assert crops == {"だいず"}

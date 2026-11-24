@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}作物を選ぶ{% endblock %}
+{% block content %}
+<h2>作物を選ぶ</h2>
+
+<p class="hint">
+  あなたが実際に作る作物を選びます。作物名の原点は<strong>農薬登録(FAMIC)の作物名</strong>です。
+  輪作計画はここで選んだ作物だけで組まれます（未選択なら全作物を候補にします）。<br>
+  「ビート」「砂糖大根」のような俗称は各作物に<strong>別名</strong>として登録でき、履歴やほ場に俗称で入力しても
+  正式名（例: てんさい）に自動で揃います。
+</p>
+
+<section class="add-block">
+  <h3>FAMIC から探して追加</h3>
+  {% if famic_ready %}
+  <input type="search" name="q" placeholder="作物名で検索（例: てんさい, 小麦, ばれいしょ）"
+         hx-get="/my-crops/famic" hx-target="#famic-results" hx-swap="innerHTML"
+         hx-trigger="input changed delay:300ms, search"
+         autocomplete="off">
+  <div id="famic-results" class="famic-results"></div>
+  {% else %}
+  <p class="hint">
+    FAMIC データが未取込です。<code>python -m scripts.import_famic</code> を実行すると
+    農薬登録の作物名から検索・追加できます。それまでは下の「マスタから追加」をご利用ください。
+  </p>
+  {% endif %}
+</section>
+
+{% include "my_crops/_list.html" %}
+{% endblock %}
