@@ -254,6 +254,51 @@ def test_fude_route_returns_polygons_in_bbox(app_client):
         test_file.unlink(missing_ok=True)
 
 
+def test_register_map_page(app_client):
+    """地図から登録ページが開き、筆トグルと作成パネルがある。"""
+    r = app_client.get("/fields/register-map")
+    assert r.status_code == 200
+    assert "地図から圃場を登録" in r.text
+    assert 'id="fude-toggle"' in r.text
+    assert 'id="create-btn"' in r.text
+
+
+def test_register_from_fude_creates_field(app_client):
+    """筆ポリゴンから新規ほ場を作成し、ポリゴンと面積が入る。"""
+    import json as _json
+    feature = {
+        "type": "Feature", "properties": {},
+        "geometry": {"type": "Polygon", "coordinates": [[
+            [141.58, 42.88], [141.582, 42.88], [141.582, 42.882], [141.58, 42.88]]]},
+    }
+    r = app_client.post("/fields/register-from-fude", data={
+        "field_code": "M-1", "name": "地図ほ場", "district": "恵庭",
+        "area_ha": "1.2", "geojson": _json.dumps(feature),
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True and body["field_code"] == "M-1"
+    # 一覧に出て、ポリゴン有り(✓)
+    r = app_client.get("/fields/")
+    assert "M-1" in r.text
+    # 重複コードは 409
+    r = app_client.post("/fields/register-from-fude", data={
+        "field_code": "M-1", "area_ha": "1.0", "geojson": _json.dumps(feature),
+    })
+    assert r.status_code == 409
+    assert r.json()["ok"] is False
+
+
+def test_register_from_fude_rejects_non_polygon(app_client):
+    import json as _json
+    point = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.5, 42.8]}}
+    r = app_client.post("/fields/register-from-fude", data={
+        "field_code": "BAD-1", "area_ha": "1.0", "geojson": _json.dumps(point),
+    })
+    assert r.status_code == 400
+    assert r.json()["ok"] is False
+
+
 def test_polygon_rejects_non_polygon(app_client):
     fid = _create_field(app_client)
     point = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.3, 43.0]}}

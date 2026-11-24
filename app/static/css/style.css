@@ -62,6 +62,21 @@ form button[type="button"]:hover { background: #f0f0f0; }
 .polygon-toolbar .cancel-link { color: #555; margin-left: auto; }
 .fude-toggle-label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.9rem; cursor: pointer; }
 .fude-info { min-height: 1.2em; margin: 0.25rem 0 0.5rem; font-size: 0.85rem; color: #b45309; }
+/* 地図から登録 */
+.register-help { font-size: 0.9rem; color: #444; margin: 0.25rem 0 0.75rem; }
+.register-map-wrap { display: flex; gap: 1rem; align-items: stretch; }
+.register-map-wrap .field-map { flex: 1 1 auto; height: 72vh; }
+.register-panel { flex: 0 0 280px; border: 1px solid #d8d8d8; border-radius: 6px; padding: 0.75rem 1rem; background: #fafafa; opacity: 0.55; }
+.register-panel.open { opacity: 1; border-color: #2d6a4f; background: #f0f7f2; }
+.register-panel h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.register-panel h4 { margin: 1rem 0 0.3rem; font-size: 0.85rem; color: #555; }
+.register-panel label { display: block; margin: 0.4rem 0; font-size: 0.85rem; }
+.register-panel input { width: 100%; padding: 0.35rem 0.5rem; box-sizing: border-box; }
+.register-panel .req { color: #b91c1c; }
+.register-panel .form-msg { min-height: 1.2em; color: #b91c1c; font-size: 0.85rem; }
+.register-panel .created-list { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; color: #2d6a4f; }
+.fude-label { background: rgba(255,255,255,0.85); border: 0; box-shadow: none; font-size: 0.75rem; font-weight: 600; color: #1b4332; }
+@media (max-width: 760px) { .register-map-wrap { flex-direction: column; } .register-panel { flex-basis: auto; } }
 #polygon-form { display: block; padding: 0; border: none; background: none; }
 
 #history-table th.field-label { text-align: left; font-weight: normal; background: #f0f0f0; }

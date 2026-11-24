@@ -337,6 +337,83 @@ def fude_polygons_in_view(
     return {"available": True, "polygons": polys, "count": len(polys)}
 
 
+@router.get("/register-map")
+def register_map(request: Request, user: CurrentUser):
+    """地図から圃場を登録するページ。筆ポリゴンをクリック→小フォームで作成。"""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT coordinates_json FROM fields "
+            "WHERE user_id = ? AND coordinates_json IS NOT NULL LIMIT 1",
+            (user["id"],),
+        ).fetchone()
+    center, zoom = SAPPORO, 14
+    if row and row["coordinates_json"]:
+        try:
+            feat = json.loads(row["coordinates_json"])
+            geom = feat.get("geometry", feat)
+            ring = geom.get("coordinates", [[]])[0]
+            if ring:
+                lats = [pt[1] for pt in ring]
+                lngs = [pt[0] for pt in ring]
+                center = [sum(lats) / len(lats), sum(lngs) / len(lngs)]
+                zoom = 15
+        except (json.JSONDecodeError, IndexError, TypeError, KeyError):
+            pass
+    return templates.TemplateResponse(
+        request, "fields/register_map.html",
+        {
+            "user": user,
+            "map_data": {"center": center, "zoom": zoom},
+            "districts": _distinct_districts(user["id"]),
+        },
+    )
+
+
+@router.post("/register-from-fude")
+def register_from_fude(
+    user: CurrentUser,
+    field_code: str = Form(...),
+    name: str = Form(""),
+    district: str = Form(""),
+    area_ha: float = Form(...),
+    geojson: str = Form(...),
+):
+    """地図で選んだ筆ポリゴンから新規ほ場を作成する。JSON を返す。"""
+    from fastapi.responses import JSONResponse
+
+    field_code = field_code.strip()
+    if not field_code:
+        return JSONResponse({"ok": False, "error": "ほ場コードを入力してください"}, status_code=400)
+    try:
+        parsed = json.loads(geojson)
+    except json.JSONDecodeError:
+        return JSONResponse({"ok": False, "error": "ポリゴンのパースに失敗"}, status_code=400)
+    geom_type = (parsed.get("geometry", {}).get("type")
+                 if parsed.get("type") == "Feature" else parsed.get("type"))
+    if geom_type != "Polygon":
+        return JSONResponse({"ok": False, "error": "Polygon ではありません"}, status_code=400)
+
+    coords_json = json.dumps(parsed, ensure_ascii=False)
+    with connect() as conn:
+        dup = conn.execute(
+            "SELECT 1 FROM fields WHERE user_id = ? AND field_code = ?",
+            (user["id"], field_code),
+        ).fetchone()
+        if dup:
+            return JSONResponse(
+                {"ok": False, "error": f"ほ場コード {field_code} は既に存在します"},
+                status_code=409,
+            )
+        cursor = conn.execute(
+            "INSERT INTO fields (user_id, field_code, district, name, area_ha, coordinates_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user["id"], field_code, district.strip() or None, name.strip() or None,
+             area_ha, coords_json),
+        )
+        field_id = cursor.lastrowid
+    return JSONResponse({"ok": True, "id": field_id, "field_code": field_code})
+
+
 @router.get("/{field_id}/polygon")
 def polygon_editor(request: Request, user: CurrentUser, field_id: int):
     with connect() as conn:
