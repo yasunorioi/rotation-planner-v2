@@ -10,6 +10,19 @@ from app.db import connect
 
 # crop_history 上の「不明」マーカー。正規化で作物名として畳み込まない。
 UNKNOWN_MARKER = "UNKNOWN"
+# UI/集計での表示名。内部マーカー UNKNOWN が生で画面・CSV・PDF に出ないようにする。
+UNKNOWN_DISPLAY = "不明"
+
+
+def display_crop(crop: str | None) -> str:
+    """内部マーカー UNKNOWN を表示用「不明」に畳む。作物名はそのまま。"""
+    return UNKNOWN_DISPLAY if crop == UNKNOWN_MARKER else (crop or "")
+
+
+def sort_crops_unknown_last(crops) -> list[str]:
+    """作物を名前順に並べ、「不明」だけ最後尾に置く（普通の作物に紛れさせない）。"""
+    reals = sorted(c for c in crops if c != UNKNOWN_DISPLAY)
+    return reals + ([UNKNOWN_DISPLAY] if UNKNOWN_DISPLAY in crops else [])
 
 
 # -----------------------------------------------------------------------------

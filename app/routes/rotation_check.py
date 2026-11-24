@@ -11,7 +11,25 @@ from fastapi import APIRouter, Query, Request
 from fastapi.templating import Jinja2Templates
 
 from app.auth import CurrentUser
+from app.crop_service import UNKNOWN_MARKER
 from app.db import connect
+
+
+def _match(a: dict, b: dict):
+    """2つの作付が輪作上「同じ括り」かを判定。(ラベル, 根拠) または None。
+
+    - 不明マーカーは判定しない
+    - 科が両方に設定済みで一致 → (科名, "科")
+    - そうでなくても作物名が同じ → (作物名, "同一作物")  ← 科未設定でも連作を捕まえる
+    """
+    ca, cb = a["crop"], b["crop"]
+    if not ca or not cb or ca == UNKNOWN_MARKER or cb == UNKNOWN_MARKER:
+        return None
+    if a["family"] and b["family"] and a["family"] == b["family"]:
+        return (a["family"], "科")
+    if ca == cb:
+        return (ca, "同一作物")
+    return None
 
 router = APIRouter(prefix="/rotation-check")
 templates = Jinja2Templates(
@@ -69,36 +87,40 @@ def _diagnose(user_id: int, gap_threshold: int) -> dict:
     for field_id, d in by_field.items():
         hist = sorted(d["history"], key=lambda e: e["year_n"])
         for i, e in enumerate(hist):
-            if e["family"] is None:
-                continue
-            # 連作チェック
-            if i > 0 and hist[i - 1]["year_n"] + 1 == e["year_n"] and hist[i - 1]["family"] == e["family"]:
-                consecutive.append({
-                    "field_code": d["field_code"],
-                    "field_name": d["field_name"],
-                    "prev_year": hist[i - 1]["year"],
-                    "prev_crop": hist[i - 1]["crop"],
-                    "year": e["year"],
-                    "crop": e["crop"],
-                    "family": e["family"],
-                })
-            # 短期再作付チェック (連作は別計上なので gap >= 1 のみ)
+            # 連作チェック (前年と連続 & 同じ括り)
+            if i > 0 and hist[i - 1]["year_n"] + 1 == e["year_n"]:
+                m = _match(hist[i - 1], e)
+                if m:
+                    consecutive.append({
+                        "field_code": d["field_code"],
+                        "field_name": d["field_name"],
+                        "prev_year": hist[i - 1]["year"],
+                        "prev_crop": hist[i - 1]["crop"],
+                        "year": e["year"],
+                        "crop": e["crop"],
+                        "group": m[0],
+                        "basis": m[1],
+                    })
+            # 短期再作付チェック (連作は別計上なので gap >= 2 のみ)
             for j in range(i - 1, -1, -1):
                 gap = e["year_n"] - hist[j]["year_n"]
                 if gap == 0 or gap > gap_threshold:
                     break
-                if gap >= 2 and hist[j]["family"] == e["family"]:
-                    short_repeat.append({
-                        "field_code": d["field_code"],
-                        "field_name": d["field_name"],
-                        "prev_year": hist[j]["year"],
-                        "prev_crop": hist[j]["crop"],
-                        "year": e["year"],
-                        "crop": e["crop"],
-                        "family": e["family"],
-                        "gap": gap,
-                    })
-                    break  # 直近1件だけで十分
+                if gap >= 2:
+                    m = _match(hist[j], e)
+                    if m:
+                        short_repeat.append({
+                            "field_code": d["field_code"],
+                            "field_name": d["field_name"],
+                            "prev_year": hist[j]["year"],
+                            "prev_crop": hist[j]["crop"],
+                            "year": e["year"],
+                            "crop": e["crop"],
+                            "group": m[0],
+                            "basis": m[1],
+                            "gap": gap,
+                        })
+                        break  # 直近1件だけで十分
 
     # 科未分類の作物
     with connect() as conn:
@@ -107,7 +129,7 @@ def _diagnose(user_id: int, gap_threshold: int) -> dict:
             "JOIN fields f ON h.field_id = f.id "
             "WHERE f.user_id = ? AND h.crop NOT IN ("
             "  SELECT name FROM crop_master WHERE family IS NOT NULL"
-            ") AND h.crop IS NOT NULL AND h.crop != ''",
+            ") AND h.crop IS NOT NULL AND h.crop != '' AND h.crop != 'UNKNOWN'",
             (user_id,),
         ).fetchall()]
 

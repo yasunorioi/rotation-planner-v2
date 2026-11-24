@@ -17,7 +17,7 @@
       <th class="field-label">{{ code }}</th>
       {% for y in result.past_years %}
         {% set crop = result.grid.get((code, y), "") %}
-        <td class="past-cell">{{ crop }}</td>
+        <td class="past-cell {% if crop == 'UNKNOWN' %}unknown{% endif %}">{% if crop == 'UNKNOWN' %}不明{% else %}{{ crop }}{% endif %}</td>
       {% endfor %}
       {% for y in result.future_years %}
         {% set fid = result.field_id_by_code.get(code) %}

@@ -6,6 +6,7 @@ RotationPlannerORTools.solve() を回して結果を整形して返す。
 import json
 from typing import Optional
 
+from app.crop_service import display_crop, sort_crops_unknown_last
 from app.db import connect
 
 
@@ -181,13 +182,14 @@ def load_plan_grid(user_id: int, plan: dict) -> dict:
     summary: dict[str, dict[str, float]] = {y: {} for y in all_years}
     for code in field_codes:
         for y in all_years:
-            crop = grid.get((code, y))
+            crop = display_crop(grid.get((code, y)))  # UNKNOWN → 不明
             if not crop:
                 continue
             if crop not in seen_crops:
                 seen_crops.add(crop)
                 crops_in_result.append(crop)
             summary[y][crop] = summary[y].get(crop, 0.0) + area_by_code[code]
+    crops_in_result = sort_crops_unknown_last(crops_in_result)
 
     is_past = {y: True for y in past_years}
     for y in future_years:
@@ -354,13 +356,14 @@ def run_optimization_for_plan(user_id: int, plan: dict, timeout_seconds: int = 5
     summary: dict[str, dict[str, float]] = {y: {} for y in all_years}
     for code in field_codes:
         for y in all_years:
-            crop = grid.get((code, y))
+            crop = display_crop(grid.get((code, y)))  # UNKNOWN → 不明
             if not crop:
                 continue
             if crop not in seen_crops:
                 seen_crops.add(crop)
                 crops_in_result.append(crop)
             summary[y][crop] = summary[y].get(crop, 0.0) + area_by_code[code]
+    crops_in_result = sort_crops_unknown_last(crops_in_result)
 
     msg = f"スコア {score:.1f} / 過去{len(past_years)}年 + 将来{len(future_years)}年"
     if pinned_cells:

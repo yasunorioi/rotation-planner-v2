@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from app.crop_service import display_crop
+
 
 _FONT_PATHS = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -139,7 +141,7 @@ def generate_plan_pdf(plan: dict, result: dict) -> bytes:
         for code in result["field_codes"]:
             row = [code]
             for y in years:
-                row.append(result["grid"].get((code, y), ""))
+                row.append(display_crop(result["grid"].get((code, y))))
             rows.append(row)
         col_widths = [25 * mm] + [18 * mm] * len(years)
         table = Table(rows, colWidths=col_widths, repeatRows=1)
@@ -207,8 +209,8 @@ def generate_compare_pdf(plan: dict, snapshot: dict, actual: dict, title: str | 
     for code in snapshot["field_codes"]:
         row = [code]
         for y in years:
-            planned = snapshot["grid"].get(f"{code}|{y}", "")
-            act = actual.get((code, y), "")
+            planned = display_crop(snapshot["grid"].get(f"{code}|{y}"))
+            act = display_crop(actual.get((code, y)))
             if planned and act:
                 if planned == act:
                     row.append(act)
@@ -237,8 +239,8 @@ def generate_compare_pdf(plan: dict, snapshot: dict, actual: dict, title: str | 
     ]
     for ri, code in enumerate(snapshot["field_codes"], start=1):
         for ci, y in enumerate(years, start=1):
-            planned = snapshot["grid"].get(f"{code}|{y}", "")
-            act = actual.get((code, y), "")
+            planned = display_crop(snapshot["grid"].get(f"{code}|{y}"))
+            act = display_crop(actual.get((code, y)))
             if planned and act:
                 if planned == act:
                     style_cmds.append(("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#d8f3dc")))

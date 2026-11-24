@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import CurrentUser
+from app.crop_service import display_crop, sort_crops_unknown_last
 from app.db import connect
 from rotation_planner.common.year_utils import generate_year_choices
 
@@ -47,7 +48,7 @@ def _compute_aggregation(user_id: int, years: list[str]) -> dict:
     year_set = set(years)
     for r in rows:
         y = r["year"]
-        crop = r["crop"]
+        crop = display_crop(r["crop"])  # 内部マーカー UNKNOWN → 「不明」
         if y not in year_set or not crop:
             continue
         if crop not in seen:
@@ -55,7 +56,7 @@ def _compute_aggregation(user_id: int, years: list[str]) -> dict:
             crops.append(crop)
         summary[y][crop] = summary[y].get(crop, 0.0) + float(r["area_ha"] or 0.0)
         counts[y][crop] = counts[y].get(crop, 0) + 1
-    crops.sort()
+    crops = sort_crops_unknown_last(crops)  # 「不明」は最後尾
     return {
         "years": years,
         "crops": crops,

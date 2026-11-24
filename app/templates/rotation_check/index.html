@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}輪作チェック{% endblock %}
 {% block content %}
-<h2>輪作チェック (科ベース)</h2>
-<p>作物マスタの「科」分類を使って、各ほ場の連作・短期再作付を検出します。</p>
+<h2>輪作チェック</h2>
+<p>各ほ場の連作・短期再作付を検出します。<strong>同一作物の繰り返しは常に検出</strong>し、作物マスタで「科」を設定すると<strong>異なる作物でも同じ科</strong>の繰り返しも拾えます。</p>
 
 <form method="get" action="/rotation-check/" class="filter-bar">
   <label>同科再作付の許容ギャップ:
@@ -16,13 +16,13 @@
 
 <section>
   <h3>🔴 連作 ({{ data.consecutive|length }} 件)</h3>
-  <p class="hint">前年と同じ「科」で作付している箇所。</p>
+  <p class="hint">前年と同じ作物、または同じ科で作付している箇所。</p>
   {% if not data.consecutive %}
   <p class="hint">該当なし</p>
   {% else %}
   <table class="check-table">
     <thead>
-      <tr><th>圃場</th><th>前年</th><th>当年</th><th>科</th></tr>
+      <tr><th>圃場</th><th>前年</th><th>当年</th><th>根拠</th></tr>
     </thead>
     <tbody>
       {% for c in data.consecutive %}
@@ -30,7 +30,7 @@
         <td>{{ c.field_code }} <small>{{ c.field_name or "" }}</small></td>
         <td>{{ c.prev_year }}: {{ c.prev_crop }}</td>
         <td>{{ c.year }}: {{ c.crop }}</td>
-        <td><span class="family-tag">{{ c.family }}</span></td>
+        <td><small>{{ c.basis }}</small> <span class="family-tag">{{ c.group }}</span></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -40,13 +40,13 @@
 
 <section>
   <h3>🟡 短期再作付 ({{ data.short_repeat|length }} 件)</h3>
-  <p class="hint">同じ科を {{ data.gap_threshold }} 年以内に再度作付している箇所 (連作除く)。</p>
+  <p class="hint">同じ作物／科を {{ data.gap_threshold }} 年以内に再度作付している箇所 (連作除く)。</p>
   {% if not data.short_repeat %}
   <p class="hint">該当なし</p>
   {% else %}
   <table class="check-table">
     <thead>
-      <tr><th>圃場</th><th>前回</th><th>今回</th><th>ギャップ</th><th>科</th></tr>
+      <tr><th>圃場</th><th>前回</th><th>今回</th><th>ギャップ</th><th>根拠</th></tr>
     </thead>
     <tbody>
       {% for c in data.short_repeat %}
@@ -55,7 +55,7 @@
         <td>{{ c.prev_year }}: {{ c.prev_crop }}</td>
         <td>{{ c.year }}: {{ c.crop }}</td>
         <td>{{ c.gap }} 年</td>
-        <td><span class="family-tag">{{ c.family }}</span></td>
+        <td><small>{{ c.basis }}</small> <span class="family-tag">{{ c.group }}</span></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -66,7 +66,7 @@
 {% if data.unclassified %}
 <section>
   <h3>📝 科分類未設定の作物 ({{ data.unclassified|length }} 件)</h3>
-  <p class="hint">これらの作物は <a href="/crop-masters/">作物マスタ</a> で科を設定してください (空のままだとチェック対象外)。</p>
+  <p class="hint">これらの作物は同一作物の連作は検出されますが、<a href="/crop-masters/">作物マスタ</a> で科を設定すると、異なる作物でも同じ科の繰り返しを拾えます。</p>
   <ul>
     {% for c in data.unclassified %}<li>{{ c }}</li>{% endfor %}
   </ul>

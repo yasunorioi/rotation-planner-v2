@@ -104,6 +104,7 @@ form button[type="button"]:hover { background: #f0f0f0; }
 .rotation-result th.past { background: #e8e8e8; color: #666; }
 .rotation-result th.future { background: #d8f3dc; }
 .rotation-result td.past-cell { background: #f5f5f5; color: #666; }
+.rotation-result td.past-cell.unknown { color: #999; font-style: italic; }
 .rotation-result td.future-cell { background: #fffceb; font-weight: 500; }
 .rotation-result td.future-cell.empty { color: #ccc; background: #fafafa; font-weight: normal; }
 .rotation-result th.field-label { background: #f0f0f0; font-weight: normal; text-align: left; }

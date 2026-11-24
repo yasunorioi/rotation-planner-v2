@@ -519,12 +519,13 @@ def export_result_csv(user: CurrentUser, plan_id: int):
     else:
         header = ["圃場"] + list(result["past_years"]) + list(result["future_years"])
         w.writerow(header)
+        from app.crop_service import display_crop
         for code in result["field_codes"]:
             row = [code]
             for y in result["past_years"]:
-                row.append(result["grid"].get((code, y), ""))
+                row.append(display_crop(result["grid"].get((code, y))))
             for y in result["future_years"]:
-                row.append(result["grid"].get((code, y), ""))
+                row.append(display_crop(result["grid"].get((code, y))))
             w.writerow(row)
     buf.seek(0)
     return StreamingResponse(

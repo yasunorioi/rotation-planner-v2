@@ -2031,6 +2031,52 @@ def test_rotation_check_unclassified(app_client):
     assert "未知の作物" in r.text
 
 
+def test_rotation_check_same_crop_without_family(app_client):
+    """科未設定でも同一作物の連作を検出する (デントコーンは crop_master に無く family なし)。"""
+    fid = _make_field(app_client, "RC4")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "デントコーン"})
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "デントコーン"})
+    r = app_client.get("/rotation-check/")
+    import re
+    consec = re.search(r"🔴 連作.*?</section>", r.text, re.DOTALL).group(0)
+    assert "RC4" in consec
+    assert "同一作物" in consec  # 根拠が科ではなく同一作物
+
+
+def test_rotation_check_ignores_unknown(app_client):
+    """UNKNOWN(不明) の連続は連作として検出しない。科未設定リストにも出さない。"""
+    fid = _make_field(app_client, "RC5")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "UNKNOWN"})
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "UNKNOWN"})
+    r = app_client.get("/rotation-check/")
+    assert "🔴 連作 (0 件)" in r.text
+    assert "UNKNOWN" not in r.text  # 生マーカーがどこにも漏れない
+
+
+def test_aggregation_unknown_shown_as_fumei(app_client):
+    """集計で UNKNOWN が生表示されず「不明」で最後尾に出る。"""
+    fid = _make_field(app_client, "AGU")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "UNKNOWN"})
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R7", "crop": "だいず"})
+    r = app_client.get("/aggregation/?from=R6&to=R7")
+    assert r.status_code == 200
+    assert "UNKNOWN" not in r.text
+    assert "不明" in r.text
+
+
+def test_plan_grid_unknown_shown_as_fumei(app_client):
+    """計画グリッド/サマリで過去の UNKNOWN が生表示されず「不明」になる。"""
+    fid = _make_field(app_client, "PGU")
+    app_client.post("/history/cell", data={"field_id": fid, "year": "R6", "crop": "UNKNOWN"})
+    import re
+    r = app_client.post("/plans/", data={"name": "PG", "start_year": "R8", "end_year": "R9"})
+    pid = int(re.search(r'id="plan-(\d+)"', r.text).group(1))
+    r = app_client.get(f"/plans/{pid}")
+    assert r.status_code == 200
+    assert "UNKNOWN" not in r.text
+    assert "不明" in r.text
+
+
 def test_plan_multiple_snapshots(app_client):
     fid = _make_field(app_client, "MS1")
     r = app_client.post("/plans/", data={"name": "MS", "start_year": "R8", "end_year": "R9"})
