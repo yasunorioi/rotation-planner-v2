@@ -60,6 +60,8 @@ form button[type="button"]:hover { background: #f0f0f0; }
 .polygon-toolbar { display: flex; gap: 0.75rem; align-items: center; margin: 0.75rem 0; }
 .polygon-toolbar button { padding: 0.5rem 1.25rem; font-size: 1rem; }
 .polygon-toolbar .cancel-link { color: #555; margin-left: auto; }
+.fude-toggle-label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.9rem; cursor: pointer; }
+.fude-info { min-height: 1.2em; margin: 0.25rem 0 0.5rem; font-size: 0.85rem; color: #b45309; }
 #polygon-form { display: block; padding: 0; border: none; background: none; }
 
 #history-table th.field-label { text-align: left; font-weight: normal; background: #f0f0f0; }

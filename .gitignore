@@ -6,4 +6,6 @@ __pycache__/
 data/*.db
 data/*.db-journal
 data/famic/
+data/fude_cache/*.geojson
+data/fude_cache/*.json
 .env

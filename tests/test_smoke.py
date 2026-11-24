@@ -178,6 +178,82 @@ def test_polygon_save_and_clear(app_client):
     assert '"geojson": null' in r.text or '"geojson":null' in r.text
 
 
+def test_polygon_editor_has_fude_toggle(app_client):
+    """ポリゴン編集画面に筆ポリゴン表示トグルがある。"""
+    fid = _create_field(app_client)
+    r = app_client.get(f"/fields/{fid}/polygon")
+    assert r.status_code == 200
+    assert 'id="fude-toggle"' in r.text
+    assert "筆ポリゴン表示" in r.text
+
+
+def test_fude_route_unavailable_when_no_cache(app_client):
+    """data/fude_cache/ にファイルが無ければ available=False を返す。"""
+    import json as _json
+    from rotation_planner.field.fude_polygon import get_fude_cache_dir
+    # 既存キャッシュを一時退避して空状態を作る
+    cache_dir = get_fude_cache_dir()
+    stash = []
+    for p in list(cache_dir.glob("*.geojson")) + list(cache_dir.glob("*.json")):
+        tmp = p.with_suffix(p.suffix + ".stash")
+        p.rename(tmp); stash.append((p, tmp))
+    try:
+        r = app_client.get("/fields/fude",
+                           params={"min_lat": 42.8, "min_lng": 141.5,
+                                   "max_lat": 42.9, "max_lng": 141.6})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["available"] is False
+        assert body["polygons"] == []
+    finally:
+        for p, tmp in stash:
+            tmp.rename(p)
+
+
+def test_fude_route_returns_polygons_in_bbox(app_client):
+    """合成した筆ポリゴン GeoJSON を置くと bbox 内のものが返り、[lat,lng] に変換される。"""
+    import json as _json
+    from rotation_planner.field.fude_polygon import get_fude_cache_dir
+    cache_dir = get_fude_cache_dir()
+    test_file = cache_dir / "99999_test.geojson"
+    # 恵庭あたり (lng=141.58, lat=42.88) に 1 筆、遠方 (lng=140, lat=44) に 1 筆
+    gj = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature",
+             "properties": {"polygon_uuid": "near-1", "land_type": "200", "area": 12000},
+             "geometry": {"type": "Polygon", "coordinates": [[
+                 [141.580, 42.880], [141.582, 42.880],
+                 [141.582, 42.882], [141.580, 42.882], [141.580, 42.880]]]}},
+            {"type": "Feature",
+             "properties": {"polygon_uuid": "far-1", "land_type": "100", "area": 5000},
+             "geometry": {"type": "Polygon", "coordinates": [[
+                 [140.0, 44.0], [140.1, 44.0], [140.1, 44.1], [140.0, 44.0]]]}},
+        ],
+    }
+    test_file.write_text(_json.dumps(gj), encoding="utf-8")
+    try:
+        r = app_client.get("/fields/fude",
+                           params={"min_lat": 42.87, "min_lng": 141.57,
+                                   "max_lat": 42.89, "max_lng": 141.59})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["available"] is True
+        # bbox 内の 1 筆だけ返る
+        got = [p for p in body["polygons"] if p["fude_id"] == "near-1"]
+        assert len(got) == 1
+        p = got[0]
+        assert p["land_type"] == "200"
+        assert abs(p["area_ha"] - 1.2) < 1e-6  # 12000 m² = 1.2 ha
+        # [lat, lng] 形式に変換されている (lat が先、~42.88)
+        assert abs(p["coordinates"][0][0] - 42.880) < 1e-6
+        assert abs(p["coordinates"][0][1] - 141.580) < 1e-6
+        # 遠方の筆は返らない
+        assert not any(pp["fude_id"] == "far-1" for pp in body["polygons"])
+    finally:
+        test_file.unlink(missing_ok=True)
+
+
 def test_polygon_rejects_non_polygon(app_client):
     fid = _create_field(app_client)
     point = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [141.3, 43.0]}}

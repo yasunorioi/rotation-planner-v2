@@ -277,6 +277,66 @@ def _geodesic_area_ha(geojson_feature: dict | None) -> float | None:
         return None
 
 
+# 筆ポリゴン (農水省 open.fude.maff.go.jp) のローカルキャッシュを読む。
+# ファイルは大きい (市町村単位で数MB) ので mtime キーでパース結果をメモリ保持する。
+_FUDE_FILE_CACHE: dict[str, tuple[float, dict]] = {}
+
+
+def _load_fude_file(path: Path) -> dict:
+    key = str(path)
+    mtime = path.stat().st_mtime
+    cached = _FUDE_FILE_CACHE.get(key)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    _FUDE_FILE_CACHE[key] = (mtime, data)
+    return data
+
+
+@router.get("/fude")
+def fude_polygons_in_view(
+    user: CurrentUser,
+    min_lat: float, min_lng: float, max_lat: float, max_lng: float,
+    max_results: int = 500,
+):
+    """地図ビュー(bbox)内の筆ポリゴンを data/fude_cache/ から返す。
+
+    データ未配置なら available=False で案内する (農水省サイトで規約同意→手動DL→
+    data/fude_cache/{市町村コード}.geojson に配置)。全ファイルを横断検索するので
+    市町村コードの指定は不要。"""
+    from rotation_planner.field.fude_polygon import (
+        get_fude_cache_dir, _polygon_in_bbox, _feature_to_polygon_data,
+    )
+
+    cache_dir = get_fude_cache_dir()
+    files = list(cache_dir.glob("*.geojson")) + list(cache_dir.glob("*.json"))
+    if not files:
+        return {"available": False, "polygons": [], "count": 0}
+
+    polys: list[dict] = []
+    for path in files:
+        if len(polys) >= max_results:
+            break
+        try:
+            geojson = _load_fude_file(path)
+        except (json.JSONDecodeError, IOError, OSError):
+            continue
+        for feature in geojson.get("features", []):
+            if len(polys) >= max_results:
+                break
+            coords = feature.get("geometry", {}).get("coordinates", [])
+            if coords and _polygon_in_bbox(coords, min_lat, min_lng, max_lat, max_lng):
+                p = _feature_to_polygon_data(feature)
+                polys.append({
+                    "fude_id": p["fude_id"],
+                    "land_type": p["land_type"],
+                    "area_ha": p["area_ha"],
+                    "coordinates": p["coordinates"],  # [[lat, lng], ...]
+                })
+    return {"available": True, "polygons": polys, "count": len(polys)}
+
+
 @router.get("/{field_id}/polygon")
 def polygon_editor(request: Request, user: CurrentUser, field_id: int):
     with connect() as conn:
