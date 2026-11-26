@@ -137,7 +137,10 @@ form button[type="button"]:hover { background: #f0f0f0; }
 .form-actions button { padding: 0.6rem 1.5rem; font-size: 1rem; background: #2d6a4f; color: #fff; border: none; border-radius: 4px; }
 .add-crop-form { margin-top: 2rem; }
 .add-crop-form h3 { font-size: 1rem; margin-bottom: 0.5rem; }
-.import-block { margin-top: 2rem; padding: 1rem; background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; }
+.import-block { margin: 0.75rem 0; padding: 0.5rem 1rem; background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; }
+.import-block > summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; color: #2d6a4f; }
+.import-block[open] { padding-bottom: 1rem; }
+.import-block .import-links { font-size: 0.85rem; margin: 0.6rem 0; }
 .import-block h3 { margin-top: 0; font-size: 1rem; }
 .import-block h3 small { font-weight: normal; font-size: 0.85rem; }
 .import-result { margin-top: 0.5rem; }
@@ -210,9 +213,9 @@ a.stat:hover { background: #f0f8f5; }
 header nav { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; }
 header nav a { margin-right: 0; }
 .nav-home { font-weight: 600; }
-.nav-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.7rem; padding-left: 0.85rem; border-left: 1px solid rgba(255,255,255,0.25); }
-.nav-label { font-size: 0.65rem; color: #b7e4c7; opacity: 0.85; font-weight: 700; letter-spacing: 0.05em; }
-.nav-group-sub a { opacity: 0.7; }
+.nav-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem 0.7rem; padding-left: 0.9rem; border-left: 1px solid rgba(255,255,255,0.4); }
+.nav-label { font-size: 0.68rem; color: #fff; font-weight: 700; letter-spacing: 0.04em; background: rgba(255,255,255,0.2); padding: 0.08rem 0.45rem; border-radius: 10px; }
+.nav-group-sub a { opacity: 0.72; }
 
 /* --- setup stepper --- */
 .stepper { border: 1px solid #cfe3d6; border-radius: 8px; padding: 0.9rem 1.1rem; margin: 0 0 1.25rem; background: #f6fbf7; }
@@ -253,11 +256,11 @@ form[hidden] { display: none; }
 .famic-name { font-size: 0.9rem; }
 
 .my-crops-selected { margin-bottom: 1.25rem; }
-.crop-rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.crop-row { background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; padding: 0.6rem 0.9rem; }
-.crop-row-head { display: flex; align-items: center; justify-content: space-between; }
-.crop-name { font-weight: 600; font-size: 1.02rem; }
-.crop-aliases { margin-top: 0.4rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.crop-rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.crop-row { background: #fff; border: 1px solid #d8d8d8; border-radius: 6px; padding: 0.35rem 0.75rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem 0.7rem; }
+.crop-name { font-weight: 600; font-size: 1rem; flex: 0 0 auto; min-width: 7rem; }
+.crop-aliases { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.crop-row .link-danger { flex: 0 0 auto; }
 .alias-label { color: #666; font-size: 0.82rem; }
 .alias-chip { display: inline-flex; align-items: center; gap: 0.25rem; background: #eef6f0; border: 1px solid #cfe3d6; border-radius: 12px; padding: 0.05rem 0.5rem; font-size: 0.82rem; }
 .alias-chip button { background: none; border: none; color: #999; cursor: pointer; padding: 0 0.1rem; font-size: 0.9rem; line-height: 1; }

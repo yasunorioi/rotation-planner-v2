@@ -7,13 +7,7 @@
     <ul class="crop-rows">
       {% for crop in selected %}
       <li class="crop-row">
-        <div class="crop-row-head">
-          <span class="crop-name">{{ crop.name }}</span>
-          <button class="link-danger"
-                  hx-post="/my-crops/remove/{{ crop.id }}"
-                  hx-target="#my-crops-list" hx-swap="outerHTML"
-                  title="この作物を外す">外す</button>
-        </div>
+        <span class="crop-name">{{ crop.name }}</span>
         <div class="crop-aliases">
           <span class="alias-label">別名:</span>
           {% for a in crop.aliases %}
@@ -22,16 +16,17 @@
                     hx-target="#my-crops-list" hx-swap="outerHTML"
                     title="別名を削除">×</button>
           </span>
-          {% else %}
-          <span class="hint">なし</span>
           {% endfor %}
           <form class="alias-add" hx-post="/my-crops/{{ crop.id }}/aliases"
                 hx-target="#my-crops-list" hx-swap="outerHTML">
-            <input type="text" name="alias" placeholder="俗称を追加（例: ビート）"
-                   size="14" autocomplete="off" required>
-            <button type="submit">＋</button>
+            <input type="text" name="alias" placeholder="＋俗称"
+                   size="8" autocomplete="off" required>
           </form>
         </div>
+        <button class="link-danger"
+                hx-post="/my-crops/remove/{{ crop.id }}"
+                hx-target="#my-crops-list" hx-swap="outerHTML"
+                title="この作物を外す">外す</button>
       </li>
       {% endfor %}
     </ul>
