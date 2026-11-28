@@ -79,7 +79,7 @@
       {% for f in recent_fields %}
       <li>
         <a href="/fields/{{ f.id }}/detail">{{ f.field_code }}</a>
-        <span>{{ f.name or "" }}</span>
+        {% if f.name and f.name != f.field_code %}<span>{{ f.name }}</span>{% endif %}
         <small>{{ f.updated_at }}</small>
       </li>
       {% endfor %}

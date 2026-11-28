@@ -201,7 +201,8 @@ a.stat:hover { background: #f0f8f5; }
 .recent-list li:last-child { border-bottom: 0; }
 .recent-list small { color: #888; margin-left: auto; font-size: 0.75rem; }
 .recent-records li { flex-wrap: nowrap; }
-.recent-records .rec-date { color: #888; font-size: 0.8rem; flex: 0 0 auto; }
+.recent-records .rec-date { color: #888; font-size: 0.8rem; flex: 0 0 auto; white-space: nowrap; }
+.recent-records li strong { flex: 0 0 auto; white-space: nowrap; }
 .recent-records .rec-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .download-btn { display: inline-block; padding: 0.6rem 1.5rem; background: #2d6a4f; color: #fff; border-radius: 4px; text-decoration: none; }
 .download-btn:hover { background: #1f4d36; }
