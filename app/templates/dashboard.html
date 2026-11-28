@@ -107,12 +107,12 @@
     <h3>最近の防除記録</h3>
     {% if not recent_records %}<p class="hint">記録がありません。</p>
     {% else %}
-    <ul class="recent-list">
+    <ul class="recent-list recent-records">
       {% for r in recent_records %}
-      <li>
-        <span>{{ r.spray_date }}</span>
+      <li title="{{ r.spray_date }} {{ r.field_code }} {{ r.pesticide_name }}">
+        <span class="rec-date">{{ r.spray_date }}</span>
         <strong>{{ r.field_code }}</strong>
-        <span>{{ r.pesticide_name }}</span>
+        <span class="rec-name">{{ r.pesticide_name }}</span>
       </li>
       {% endfor %}
     </ul>

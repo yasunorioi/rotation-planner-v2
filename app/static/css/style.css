@@ -118,7 +118,7 @@ form button[type="button"]:hover { background: #f0f0f0; }
 .plan-cell.editing form { display: flex; gap: 0.2rem; padding: 0.15rem; border: none; background: none; margin: 0; align-items: center; }
 .plan-cell.editing input[type="text"] { flex: 1 1 auto; min-width: 60px; padding: 0.3rem 0.5rem; border: 2px solid #2d6a4f; }
 .pinfill-help { margin: 0.75rem 0; padding: 0.5rem 0.75rem; background: #f0f7f2; border-left: 3px solid #2d6a4f; font-size: 0.9rem; }
-.primary-action { background: #2d6a4f; color: #fff; border: 1px solid #2d6a4f; border-radius: 4px; padding: 0.3rem 0.8rem; cursor: pointer; font-weight: 600; }
+.primary-action { background: #2d6a4f; color: #fff; border: 1px solid #2d6a4f; border-radius: 4px; padding: 0.5rem 1.3rem; font-size: 1rem; cursor: pointer; font-weight: 600; }
 .primary-action:hover { background: #1f4d36; }
 .warnings { margin-top: 1rem; }
 .warnings summary { cursor: pointer; color: #b91c1c; }
@@ -200,6 +200,9 @@ a.stat:hover { background: #f0f8f5; }
 .recent-list li { padding: 0.4rem 0; border-bottom: 1px solid #eee; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
 .recent-list li:last-child { border-bottom: 0; }
 .recent-list small { color: #888; margin-left: auto; font-size: 0.75rem; }
+.recent-records li { flex-wrap: nowrap; }
+.recent-records .rec-date { color: #888; font-size: 0.8rem; flex: 0 0 auto; }
+.recent-records .rec-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .download-btn { display: inline-block; padding: 0.6rem 1.5rem; background: #2d6a4f; color: #fff; border-radius: 4px; text-decoration: none; }
 .download-btn:hover { background: #1f4d36; }
 .check-table { background: #fff; margin-bottom: 1.5rem; }
